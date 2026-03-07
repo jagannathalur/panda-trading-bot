@@ -1,0 +1,60 @@
+apiVersion: 1
+
+groups:
+  - name: panda_critical
+    folder: Panda Trading Bot
+    interval: 1m
+    rules:
+      - uid: kill-switch-triggered
+        title: Kill Switch Triggered
+        condition: C
+        data:
+          - refId: A
+            queryType: range
+            model:
+              expr: panda_kill_switch_active
+        noDataState: OK
+        execErrState: Error
+        for: 0m
+        annotations:
+          summary: "CRITICAL: Kill switch has been triggered"
+          description: "All new trades are halted. Immediate operator attention required."
+        labels:
+          severity: critical
+
+      - uid: drawdown-cap-hit
+        title: Drawdown Cap Hit
+        condition: C
+        data:
+          - refId: A
+            model:
+              expr: panda_drawdown_pct > 10
+        for: 1m
+        annotations:
+          summary: "WARNING: Drawdown cap reached {{ $value }}%"
+        labels:
+          severity: warning
+
+      - uid: daily-loss-cap-hit
+        title: Daily Loss Cap Hit
+        data:
+          - refId: A
+            model:
+              expr: panda_daily_loss_pct > 2
+        for: 0m
+        annotations:
+          summary: "WARNING: Daily loss cap reached {{ $value }}%"
+        labels:
+          severity: warning
+
+      - uid: artifact-stale
+        title: Promotion Artifact Stale
+        data:
+          - refId: A
+            model:
+              expr: panda_artifact_age_hours > 168
+        for: 5m
+        annotations:
+          summary: "Strategy artifact is stale — re-run validation pipeline"
+        labels:
+          severity: warning

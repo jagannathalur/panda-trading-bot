@@ -1,0 +1,56 @@
+# =========================================================
+# configs/real.yaml — REAL TRADING config
+# DANGER: This config enables real order execution.
+# REQUIRES: all operator gates in mode_control to pass.
+# =========================================================
+
+# Real trading — dry_run must be false
+dry_run: false
+
+# Real exchange credentials loaded from environment
+exchange:
+  key: "${BYBIT_API_KEY}"
+  secret: "${BYBIT_API_SECRET}"
+  ccxt_config:
+    enableRateLimit: true
+    defaultType: future       # Bybit futures
+
+# Conservative position sizes for real trading
+stake_amount: 25              # Smaller position in real mode
+max_open_trades: 3            # Fewer concurrent trades
+
+# Real mode labels
+bot_name: "panda-trading-bot-REAL"
+
+# Strict stoploss for real money
+stoploss: -0.03               # 3% hard stoploss (tighter than paper)
+trailing_stop: true
+trailing_stop_positive: 0.01
+trailing_stop_positive_offset: 0.02
+
+# Real mode pairs (start conservative)
+exchange:
+  pair_whitelist:
+    - "BTC/USDT:USDT"
+    - "ETH/USDT:USDT"
+
+# Real order types
+order_types:
+  entry: limit
+  exit: limit
+  stoploss: market
+  stoploss_on_exchange: true
+
+# Tighter rate limiting for real exchange
+internals:
+  process_throttle_secs: 5
+
+# Real mode risk (tighter than paper)
+panda_risk:
+  max_daily_loss_pct: 1.0     # Tighter daily cap for real
+  max_drawdown_pct: 7.0
+  kill_switch_drawdown_pct: 12.0
+  max_leverage: 2.0
+  max_position_size_pct: 8.0
+  max_total_exposure_pct: 30.0
+  consecutive_loss_pause_count: 2

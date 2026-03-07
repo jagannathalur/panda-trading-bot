@@ -1,0 +1,102 @@
+# =========================================================
+# configs/base.yaml — Freqtrade base configuration
+# Applied to ALL modes (paper and real).
+# Mode-specific overrides in paper.yaml or real.yaml.
+# =========================================================
+
+# Exchange — Bybit via CCXT
+exchange:
+  name: bybit
+  key: ""           # Set via BYBIT_API_KEY env / secrets
+  secret: ""        # Set via BYBIT_API_SECRET env / secrets
+  ccxt_config:
+    enableRateLimit: true
+  ccxt_async_config:
+    enableRateLimit: true
+
+# Trading mode — overridden in paper.yaml / real.yaml
+dry_run: true           # SAFE DEFAULT: always paper unless explicitly overridden
+dry_run_wallet: 1000    # Simulated wallet in USDT
+
+# Trading pairs
+exchange:
+  pair_whitelist:
+    - "BTC/USDT:USDT"
+    - "ETH/USDT:USDT"
+    - "SOL/USDT:USDT"
+
+# Stoploss
+stoploss: -0.05           # 5% hard stoploss
+trailing_stop: false
+
+# Stake settings
+stake_currency: USDT
+stake_amount: 50          # USDT per trade
+max_open_trades: 5        # Overridden by risk layer
+
+# Timeframe
+timeframe: "5m"
+
+# Order types
+order_types:
+  entry: limit
+  exit: limit
+  stoploss: market
+  stoploss_on_exchange: true
+
+order_time_in_force:
+  entry: GTC
+  exit: GTC
+
+# API Server (FreqUI)
+api_server:
+  enabled: true
+  listen_ip_address: "127.0.0.1"
+  listen_port: 8080
+  verbosity: error
+  enable_openapi: true
+  jwt_secret_key: "change-me-in-production"
+  CORS_origins:
+    - "http://localhost:8080"
+    - "http://localhost:8081"
+  username: "freqtrade"
+  password: "change-me"
+
+# Telegram (optional)
+telegram:
+  enabled: false
+  token: ""
+  chat_id: ""
+
+# Logging
+internals:
+  process_throttle_secs: 5
+  heartbeat_interval: 60
+
+# User data
+user_data_dir: "./user_data"
+
+# Bot name
+bot_name: "panda-trading-bot"
+
+# Custom panda settings (read by our custom_app modules)
+panda_risk:
+  max_daily_loss_pct: 2.0
+  max_drawdown_pct: 10.0
+  kill_switch_drawdown_pct: 15.0
+  max_leverage: 3.0
+  max_position_size_pct: 10.0
+  max_total_exposure_pct: 50.0
+  consecutive_loss_pause_count: 3
+
+panda_no_alpha:
+  min_signal_strength: 0.5
+  min_edge_confidence: 0.6
+  min_expected_gross_edge_bps: 8.0
+  min_expected_net_edge_bps: 5.0
+  min_market_quality_score: 0.6
+  min_model_quality_score: 0.7
+
+panda_audit:
+  log_path: "./data/audit.log"
+  enabled: true

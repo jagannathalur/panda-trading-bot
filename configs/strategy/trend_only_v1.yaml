@@ -1,0 +1,22 @@
+# Strategy: TrendOnlyV1 — Pure trend following, no grid
+strategy:
+  id: TrendOnlyV1
+  version: "1.0.0"
+  class: TrendOnlyV1
+  timeframe: "15m"
+  parameters:
+    ema_fast: 12
+    ema_slow: 26
+    rsi_period: 14
+    rsi_overbought: 70
+    rsi_oversold: 30
+    atr_period: 14
+    atr_multiplier: 2.5
+  bounds:
+    ema_fast: [8, 30]
+    ema_slow: [20, 100]
+    rsi_period: [7, 21]
+    rsi_overbought: [65, 80]
+    rsi_oversold: [20, 35]
+    atr_multiplier: [1.5, 4.0]
+  promotion_state: draft

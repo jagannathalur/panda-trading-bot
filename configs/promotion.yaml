@@ -1,0 +1,44 @@
+# =========================================================
+# configs/promotion.yaml — Strategy promotion pipeline config
+# =========================================================
+
+promotion:
+  # Artifact freshness window
+  artifact_max_age_hours: 168     # 7 days
+
+  # Backtest settings
+  backtest:
+    timerange: "20230101-20231231"
+    timeframe: "5m"
+    min_trades: 100               # Reject if backtest has < 100 trades
+    min_profit_factor: 1.2        # Minimum profit factor
+    max_drawdown_pct: 20.0        # Reject if backtest drawdown > 20%
+    required: true
+
+  # Walk-forward validation
+  walk_forward:
+    windows: 5                    # Number of WF windows
+    in_sample_ratio: 0.7          # 70% in-sample, 30% out-of-sample
+    min_oos_win_rate: 0.45        # Minimum OOS win rate
+    required: true
+
+  # Paper shadow run
+  shadow:
+    min_duration_hours: 72        # Minimum 3-day shadow run
+    min_trades: 10                # Minimum trades during shadow
+    max_live_paper_drift_pct: 5.0 # Max acceptable drift from live prices
+    required: true
+
+  # Artifacts directory
+  artifacts_dir: "./data/artifacts"
+
+  # Registry
+  registry_path: "./data/strategy_registry.json"
+
+  # Promotion states requiring operator action
+  operator_required_states:
+    - small_live
+    - full_live
+
+  # Note: Promotion to small_live/full_live does NOT enable real trading.
+  # Real trading requires separate operator action via mode_control.

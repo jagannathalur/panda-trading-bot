@@ -1,0 +1,44 @@
+# =========================================================
+# Strategy: GridTrendV1
+# Combines grid trading with trend following.
+# =========================================================
+
+strategy:
+  id: GridTrendV1
+  version: "1.0.0"
+  class: GridTrendV1
+  timeframe: "5m"
+
+  # Bounded parameters — hard limits enforced by promotion pipeline
+  parameters:
+    grid_levels: 5
+    grid_spacing_pct: 0.5
+    trend_ema_fast: 20
+    trend_ema_slow: 50
+    atr_period: 14
+    atr_multiplier: 2.0
+
+  # Hard parameter bounds (enforced by self-correction guard)
+  bounds:
+    grid_levels: [3, 10]
+    grid_spacing_pct: [0.2, 2.0]
+    trend_ema_fast: [10, 50]
+    trend_ema_slow: [30, 200]
+    atr_period: [7, 28]
+    atr_multiplier: [1.0, 4.0]
+
+  # Max step size per reoptimization
+  max_step_size:
+    grid_levels: 1
+    grid_spacing_pct: 0.1
+    trend_ema_fast: 5
+    trend_ema_slow: 10
+
+  # Hysteresis — minimum improvement before parameter change accepted
+  hysteresis_pct: 2.0
+
+  # Cooldown between reoptimizations
+  reoptimization_cooldown_hours: 168   # 7 days
+
+  # Promotion state
+  promotion_state: draft

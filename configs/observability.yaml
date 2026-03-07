@@ -1,0 +1,75 @@
+# =========================================================
+# configs/observability.yaml — Metrics and alerting config
+# =========================================================
+
+prometheus:
+  enabled: true
+  port: 9200
+  path: /metrics
+  scrape_interval_seconds: 15
+
+grafana:
+  url: "http://localhost:3000"
+  org_id: 1
+  dashboards_dir: "configs/grafana/dashboards"
+  datasources_dir: "configs/grafana/datasources"
+
+metrics:
+  # PnL metrics
+  pnl:
+    enabled: true
+    track_realized: true
+    track_unrealized: true
+    track_fees: true
+    track_slippage: true
+
+  # Risk metrics
+  risk:
+    enabled: true
+    track_drawdown: true
+    track_exposure: true
+    track_leverage: true
+    track_consecutive_losses: true
+
+  # Execution quality
+  execution:
+    enabled: true
+    track_fill_ratio: true
+    track_rejection_rate: true
+    track_latency_ms: true
+    track_slippage_bps: true
+
+  # Drift metrics
+  drift:
+    enabled: true
+    live_vs_backtest: true
+    live_vs_paper: true
+    challenger_vs_champion: true
+
+  # Validation metrics
+  validation:
+    enabled: true
+    track_artifact_age: true
+    track_promotion_stage: true
+
+alerts:
+  kill_switch_triggered:
+    severity: critical
+    notify: [slack, email]
+
+  daily_loss_cap_hit:
+    severity: warning
+    notify: [slack]
+
+  drawdown_cap_hit:
+    severity: warning
+    notify: [slack]
+
+  artifact_stale:
+    severity: warning
+    notify: [slack]
+
+  no_alpha_block_rate_high:
+    severity: info
+    threshold_pct: 80   # Alert if > 80% of signals blocked
+    notify: [slack]

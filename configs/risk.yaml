@@ -1,0 +1,46 @@
+# =========================================================
+# configs/risk.yaml — Risk engine configuration
+# Loaded by custom_app/risk_layer/ independently of Freqtrade.
+# =========================================================
+
+risk_engine:
+  enabled: true
+  fail_closed: true           # Any check error = veto (never fail open)
+
+  # Daily loss cap
+  max_daily_loss_pct: 2.0     # Stop new trades if daily loss >= 2% equity
+
+  # Rolling drawdown
+  max_drawdown_pct: 10.0      # Pause new trades at 10% drawdown
+  kill_switch_drawdown_pct: 15.0  # Hard stop at 15% drawdown
+
+  # Leverage
+  max_leverage: 3.0           # Maximum leverage multiplier
+
+  # Open trade caps
+  max_open_trades: 5
+
+  # Position sizing
+  max_position_size_pct: 10.0     # Max single position as % of equity
+  max_total_exposure_pct: 50.0    # Max total exposure as % of equity
+
+  # Consecutive loss pause
+  consecutive_loss_pause_count: 3
+
+  # Minimum time between trades on same pair (seconds)
+  min_trade_interval_seconds: 300
+
+  # Order rejection rate threshold
+  max_rejection_rate: 0.3         # Halt if > 30% of orders rejected
+
+kill_switch:
+  # Manual kill switch — operator can arm via script
+  armed: false
+  # Auto-arm on drawdown (handled by engine)
+  auto_arm_on_drawdown: true
+
+emergency_flatten:
+  # Called when kill switch triggered
+  enabled: true
+  freqtrade_api_url: "http://127.0.0.1:8081"
+  timeout_seconds: 30

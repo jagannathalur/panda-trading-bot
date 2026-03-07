@@ -1,0 +1,27 @@
+# =========================================================
+# configs/paper.yaml — Paper / dry-run mode config
+# Layered on top of base.yaml.
+# =========================================================
+
+# Explicitly set dry_run=true for paper mode
+dry_run: true
+dry_run_wallet: 10000   # Simulated USDT wallet
+
+# Paper mode labels
+bot_name: "panda-trading-bot-PAPER"
+
+# More aggressive pair list for paper testing
+exchange:
+  pair_whitelist:
+    - "BTC/USDT:USDT"
+    - "ETH/USDT:USDT"
+    - "SOL/USDT:USDT"
+    - "BNB/USDT:USDT"
+    - "AVAX/USDT:USDT"
+
+# Faster heartbeat for paper testing
+internals:
+  process_throttle_secs: 3
+
+# Paper-specific logging
+verbosity: 0

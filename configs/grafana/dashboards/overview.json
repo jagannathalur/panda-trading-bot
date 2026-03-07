@@ -1,0 +1,110 @@
+{
+  "title": "Panda Trading Bot — Overview",
+  "uid": "panda-overview",
+  "tags": ["trading", "panda"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Trading Mode (READ-ONLY)",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 4, "x": 0, "y": 0},
+      "targets": [{"expr": "panda_trading_mode", "legendFormat": "Mode"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "value"},
+      "description": "Trading mode is READ-ONLY. Cannot be changed via dashboard."
+    },
+    {
+      "id": 2,
+      "title": "Kill Switch State",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 4, "x": 4, "y": 0},
+      "targets": [{"expr": "panda_kill_switch_active", "legendFormat": "Kill Switch"}],
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DISARMED", "color": "green"}, "1": {"text": "ARMED", "color": "red"}}}]}}
+    },
+    {
+      "id": 3,
+      "title": "No-Alpha Gate",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 4, "x": 8, "y": 0},
+      "targets": [{"expr": "rate(panda_no_alpha_blocks_total[5m])", "legendFormat": "Blocks/min"}]
+    },
+    {
+      "id": 4,
+      "title": "Daily PnL (USDT)",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 4, "x": 12, "y": 0},
+      "targets": [{"expr": "panda_daily_pnl_usdt", "legendFormat": "Daily PnL"}]
+    },
+    {
+      "id": 5,
+      "title": "Current Drawdown %",
+      "type": "gauge",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 3},
+      "targets": [{"expr": "panda_drawdown_pct", "legendFormat": "Drawdown"}],
+      "fieldConfig": {"defaults": {"min": 0, "max": 20, "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "yellow", "value": 7}, {"color": "red", "value": 12}]}}}
+    },
+    {
+      "id": 6,
+      "title": "Total Exposure %",
+      "type": "gauge",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 3},
+      "targets": [{"expr": "panda_total_exposure_pct", "legendFormat": "Exposure"}],
+      "fieldConfig": {"defaults": {"min": 0, "max": 100, "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "yellow", "value": 40}, {"color": "red", "value": 60}]}}}
+    },
+    {
+      "id": 7,
+      "title": "Open Trades",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 3},
+      "targets": [{"expr": "panda_open_trades", "legendFormat": "Open Trades"}]
+    },
+    {
+      "id": 8,
+      "title": "PnL Over Time",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 7},
+      "targets": [
+        {"expr": "panda_cumulative_pnl_usdt", "legendFormat": "Cumulative PnL"},
+        {"expr": "panda_daily_pnl_usdt", "legendFormat": "Daily PnL"}
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Fill Ratio & Execution Quality",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 7},
+      "targets": [
+        {"expr": "panda_fill_ratio", "legendFormat": "Fill Ratio"},
+        {"expr": "panda_order_rejection_rate", "legendFormat": "Rejection Rate"}
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Promotion Status",
+      "type": "table",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 15},
+      "targets": [{"expr": "panda_promotion_stage", "legendFormat": "{{strategy_id}}"}],
+      "description": "Current promotion stage for each strategy"
+    },
+    {
+      "id": 11,
+      "title": "Live vs Backtest Drift",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 15},
+      "targets": [
+        {"expr": "panda_live_vs_backtest_drift_pct", "legendFormat": "Live/Backtest Drift %"},
+        {"expr": "panda_live_vs_paper_drift_pct", "legendFormat": "Live/Paper Drift %"}
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Audit Log Events (Last Hour)",
+      "type": "logs",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 21},
+      "targets": [{"expr": "panda_audit_events_total", "legendFormat": "{{event_type}}"}]
+    }
+  ]
+}
