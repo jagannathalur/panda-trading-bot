@@ -22,7 +22,10 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from custom_app.signals.macro_collector import MacroContext
 
 logger = logging.getLogger(__name__)
 
@@ -80,11 +83,18 @@ class LLMSentimentGate:
     # Public API
     # ------------------------------------------------------------------
 
-    def evaluate(self, pair: str, side: str, headlines: list[str]) -> SentimentResult:
+    def evaluate(
+        self,
+        pair: str,
+        side: str,
+        headlines: list[str],
+        macro_context: "Optional[MacroContext]" = None,
+    ) -> SentimentResult:
         """
         Evaluate sentiment and return a SentimentResult.
         Never raises — returns a result with allowed=True on API errors (fail-open).
         Thread-safe.
+        macro_context: optional pre-computed macro state for richer LLM context.
         """
         now = time.monotonic()
 
@@ -117,7 +127,7 @@ class LLMSentimentGate:
         if not headlines:
             logger.debug("[LLMSentiment] No headlines for %s — calling LLM with no context", pair)
 
-        result = self._call_llm(pair, side, headlines)
+        result = self._call_llm(pair, side, headlines, macro_context)
 
         with self._lock:
             # Only cache successful LLM results — don't cache errors/skipped
@@ -137,12 +147,18 @@ class LLMSentimentGate:
     # Internal
     # ------------------------------------------------------------------
 
-    def _call_llm(self, pair: str, side: str, headlines: list[str]) -> SentimentResult:
+    def _call_llm(
+        self,
+        pair: str,
+        side: str,
+        headlines: list[str],
+        macro_context: "Optional[MacroContext]" = None,
+    ) -> SentimentResult:
         if self._client is None:
             logger.warning("[LLMSentiment] Client not available — skipping LLM gate")
             return self._make_result(pair, side, 0.0, 0.0, False, "LLM unavailable", "skipped")
 
-        prompt = self._build_prompt(pair, side, headlines)
+        prompt = self._build_prompt(pair, side, headlines, macro_context)
         try:
             message = self._client.messages.create(
                 model=self._model,
@@ -170,18 +186,41 @@ class LLMSentimentGate:
                     )
             return self._make_result(pair, side, 0.0, 0.0, False, f"API error: {safe_msg}", "skipped")
 
-    def _build_prompt(self, pair: str, side: str, headlines: list[str]) -> str:
+    def _build_prompt(
+        self,
+        pair: str,
+        side: str,
+        headlines: list[str],
+        macro_context: "Optional[MacroContext]" = None,
+    ) -> str:
         direction = "buying (long)" if side == "long" else "selling short"
         if headlines:
             headline_block = "\n".join(f"- {h}" for h in headlines)
         else:
             headline_block = "(no recent headlines available)"
 
+        # Macro context block — added when pre-computed state is available
+        if macro_context is not None:
+            ob_pct = round(macro_context.orderbook_imbalance * 100)
+            liq_str = "YES — cascade in progress" if macro_context.liquidation_alert else "none"
+            oi_str = f"{macro_context.oi_change_pct:+.1f}%"
+            macro_block = (
+                f"\nMACRO CONTEXT (pre-computed, 30s old max):\n"
+                f"Fear & Greed: {macro_context.fear_greed_value} ({macro_context.fear_greed_label})\n"
+                f"Geopolitical risk: {macro_context.geo_risk_score:.2f}/1.0 ({macro_context.geo_risk_summary})\n"
+                f"Liquidation cascade: {liq_str}\n"
+                f"Open interest trend: {oi_str} (negative = positions closing)\n"
+                f"Orderbook: {ob_pct}% bids (>65% bullish pressure, <35% bearish)\n"
+            )
+        else:
+            macro_block = ""
+
         return (
             f"You are a crypto market sentiment filter for an automated trading bot.\n"
             f"PAIR: {pair}\n"
             f"DIRECTION: {direction}\n"
-            f"RECENT HEADLINES:\n{headline_block}\n\n"
+            f"RECENT HEADLINES:\n{headline_block}\n"
+            f"{macro_block}\n"
             f"Respond in JSON only — no explanation outside the JSON:\n"
             f'{{"sentiment": <float -1.0 to 1.0>, '
             f'"confidence": <float 0.0 to 1.0>, '
@@ -190,7 +229,8 @@ class LLMSentimentGate:
             f'"reason": "<max 15 words>"}}\n\n'
             f"Rules: sentiment>0 = bullish, sentiment<0 = bearish. "
             f"Low confidence if news is old or irrelevant. "
-            f"black_swan only for catastrophic, market-halting events."
+            f"black_swan only for catastrophic, market-halting events. "
+            f"Consider macro context in your assessment."
         )
 
     def _parse_response(self, pair: str, side: str, raw: str) -> SentimentResult:
