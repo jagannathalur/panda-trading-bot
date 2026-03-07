@@ -8,11 +8,10 @@ Each stage must pass before the next can run.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import subprocess
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -36,7 +35,7 @@ class ValidationConfig:
 
     def __post_init__(self):
         if self.config_paths is None:
-            self.config_paths = ["configs/base.yaml", "configs/paper.yaml"]
+            self.config_paths = ["configs/base.json", "configs/paper.json"]
 
 
 class ValidationOrchestrator:
@@ -69,6 +68,8 @@ class ValidationOrchestrator:
             self._config.strategy_version,
         )
 
+        self._validate_config_paths()
+
         artifact = PromotionArtifact(
             strategy_id=self._config.strategy_id,
             version=self._config.strategy_version,
@@ -93,13 +94,14 @@ class ValidationOrchestrator:
         try:
             wf_report = self._run_walk_forward()
             artifact.walk_forward_report = wf_report
-            logger.info("[Validation] Walk-forward PASSED")
+            logger.info("[Validation] Walk-forward PASSED (%d/%d windows)",
+                        wf_report["passed"], wf_report["total"])
         except Exception as exc:
             artifact.fail_reason = f"Walk-forward failed: {exc}"
             artifact.save(self._config.artifacts_dir)
             raise RuntimeError(f"Validation failed at walk-forward stage: {exc}")
 
-        # Stage 3: Shadow (note: this is long-running, usually called separately)
+        # Stage 3: Shadow (long-running, started separately)
         logger.info(
             "[Validation] Shadow stage requires %dh of paper run. "
             "Run make shadow to start shadow mode separately.",
@@ -112,6 +114,15 @@ class ValidationOrchestrator:
 
         self._audit_completion(artifact)
         return artifact
+
+    def _validate_config_paths(self) -> None:
+        """Raise FileNotFoundError if any config file is missing."""
+        for cp in self._config.config_paths:
+            if not Path(cp).exists():
+                raise FileNotFoundError(
+                    f"Config file not found: {cp}. "
+                    f"Check ValidationConfig.config_paths."
+                )
 
     def _run_backtest(self) -> dict:
         """Run deterministic backtest via Freqtrade CLI."""
@@ -138,20 +149,78 @@ class ValidationOrchestrator:
         }
 
     def _run_walk_forward(self) -> dict:
-        """Run walk-forward validation via Freqtrade hyperopt in rolling windows."""
-        # Freqtrade doesn't have native WF yet — we emulate with rolling backtests
+        """
+        Run walk-forward validation via rolling backtest windows.
+
+        Splits the configured timerange into N equal windows and runs a
+        backtest for each window's out-of-sample period.
+        All windows must pass for walk-forward to succeed.
+        """
+        try:
+            start_str, end_str = self._config.timerange.split("-")
+            start = datetime.strptime(start_str, "%Y%m%d")
+            end = datetime.strptime(end_str, "%Y%m%d")
+        except (ValueError, AttributeError) as exc:
+            raise RuntimeError(
+                f"Invalid timerange format '{self._config.timerange}'. "
+                f"Expected YYYYMMDD-YYYYMMDD: {exc}"
+            )
+
+        total_days = (end - start).days
+        window_days = total_days // self._config.walk_forward_windows
+
+        if window_days < 7:
+            raise RuntimeError(
+                f"Walk-forward window too small ({window_days} days per window). "
+                f"Increase timerange or reduce walk_forward_windows "
+                f"(current: {self._config.walk_forward_windows})."
+            )
+
         results = []
-        logger.info(
-            "[Validation] Running %d walk-forward windows", self._config.walk_forward_windows
-        )
-        # Placeholder: real implementation splits timerange into windows
-        results.append({
-            "windows": self._config.walk_forward_windows,
-            "status": "completed",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "note": "Walk-forward uses rolling backtest windows. Implement per strategy.",
-        })
-        return {"windows": results}
+        n = self._config.walk_forward_windows
+        logger.info("[Validation] Running %d walk-forward windows (%d days each)", n, window_days)
+
+        for i in range(n):
+            window_start = start + timedelta(days=i * window_days)
+            # Last window absorbs any remaining days
+            window_end = end if i == n - 1 else start + timedelta(days=(i + 1) * window_days)
+            tr = f"{window_start.strftime('%Y%m%d')}-{window_end.strftime('%Y%m%d')}"
+
+            logger.info("[Validation] Walk-forward window %d/%d: %s", i + 1, n, tr)
+
+            cmd = [
+                "python3", "-m", "freqtrade", "backtesting",
+                "--strategy", self._config.strategy_id,
+                "--timerange", tr,
+                "--userdir", self._config.user_data_dir,
+            ]
+            for cp in self._config.config_paths:
+                cmd += ["--config", cp]
+
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=self._ft_dir)
+            window_result = {
+                "window": i + 1,
+                "timerange": tr,
+                "returncode": result.returncode,
+                "passed": result.returncode == 0,
+                "stdout_tail": result.stdout[-1000:],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            results.append(window_result)
+
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"Walk-forward window {i + 1}/{n} ({tr}) failed:\n"
+                    f"{result.stderr[-500:]}"
+                )
+
+        passed_count = sum(1 for r in results if r["passed"])
+        return {
+            "windows": results,
+            "total": n,
+            "passed": passed_count,
+            "pass_rate": passed_count / n,
+        }
 
     def _audit_completion(self, artifact: PromotionArtifact) -> None:
         try:

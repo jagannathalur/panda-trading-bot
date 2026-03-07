@@ -200,6 +200,11 @@ class RiskEngine:
                 reason=f"Invalid amount_quote: {intent.amount_quote}",
                 check_name="invalid_amount",
             )
+        if intent.amount_quote < 0:
+            raise RiskVetoError(
+                reason=f"Negative amount_quote: {intent.amount_quote}",
+                check_name="negative_amount",
+            )
         if state.total_equity <= 0:
             return
         pct = (intent.amount_quote / state.total_equity) * 100.0

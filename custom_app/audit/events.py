@@ -48,6 +48,10 @@ class AuditEventType(StrEnum):
     ORDER_FILLED = "order.filled"
     ORDER_REJECTED = "order.rejected"
     ORDER_CANCELLED = "order.cancelled"
+    # Daily monitor (Claude ↔ system communication)
+    MONITOR_RUN = "monitor.run"
+    MONITOR_USER_NOTE_READ = "monitor.user_note_read"
+    MONITOR_STRATEGY_DECISION = "monitor.strategy_decision"
 
 
 @dataclass

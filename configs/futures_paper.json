@@ -1,0 +1,25 @@
+{
+  "trading_mode": "futures",
+  "margin_mode": "isolated",
+  "dry_run": true,
+  "dry_run_wallet": 10000,
+  "bot_name": "panda-trading-bot-FUTURES-PAPER",
+
+  "exchange": {
+    "pair_whitelist": [
+      "BTC/USDT:USDT",
+      "ETH/USDT:USDT",
+      "SOL/USDT:USDT"
+    ]
+  },
+
+  "leverage_config": {
+    "BTC/USDT:USDT": [[0, 2]],
+    "ETH/USDT:USDT": [[0, 2]],
+    "SOL/USDT:USDT": [[0, 2]]
+  },
+
+  "internals": {
+    "process_throttle_secs": 3
+  }
+}

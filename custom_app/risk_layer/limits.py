@@ -45,4 +45,6 @@ class RiskLimits:
             "max_position_size_pct": self.max_position_size_pct,
             "max_total_exposure_pct": self.max_total_exposure_pct,
             "consecutive_loss_pause_count": self.consecutive_loss_pause_count,
+            "min_trade_interval_seconds": self.min_trade_interval_seconds,
+            "max_rejection_rate": self.max_rejection_rate,
         }

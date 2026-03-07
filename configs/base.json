@@ -1,0 +1,102 @@
+{
+  "exchange": {
+    "name": "bybit",
+    "key": "",
+    "secret": "",
+    "pair_whitelist": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "SOL/USDT"
+    ],
+    "ccxt_config": {
+      "enableRateLimit": true
+    },
+    "ccxt_async_config": {
+      "enableRateLimit": true
+    }
+  },
+  "dry_run": true,
+  "dry_run_wallet": 1000,
+  "stoploss": -0.05,
+  "trailing_stop": false,
+  "stake_currency": "USDT",
+  "stake_amount": 50,
+  "max_open_trades": 5,
+  "timeframe": "5m",
+  "order_types": {
+    "entry": "limit",
+    "exit": "limit",
+    "stoploss": "market",
+    "stoploss_on_exchange": false
+  },
+  "order_time_in_force": {
+    "entry": "GTC",
+    "exit": "GTC"
+  },
+  "entry_pricing": {
+    "price_side": "same",
+    "use_order_book": true,
+    "order_book_top": 1,
+    "price_last_balance": 0.0,
+    "check_depth_of_market": {
+      "enabled": false,
+      "bids_to_ask_delta": 1
+    }
+  },
+  "exit_pricing": {
+    "price_side": "same",
+    "use_order_book": true,
+    "order_book_top": 1
+  },
+  "api_server": {
+    "enabled": true,
+    "listen_ip_address": "127.0.0.1",
+    "listen_port": 8081,
+    "verbosity": "error",
+    "enable_openapi": true,
+    "jwt_secret_key": "change-me-in-production",
+    "CORS_origins": [
+      "http://localhost:8080",
+      "http://localhost:8081"
+    ],
+    "username": "freqtrade",
+    "password": "change-me"
+  },
+  "telegram": {
+    "enabled": false,
+    "token": "",
+    "chat_id": ""
+  },
+  "internals": {
+    "process_throttle_secs": 5,
+    "heartbeat_interval": 60
+  },
+  "pairlists": [
+    {
+      "method": "StaticPairList"
+    }
+  ],
+  "user_data_dir": "./user_data",
+  "bot_name": "panda-trading-bot",
+  "panda_risk": {
+    "max_daily_loss_pct": 2.0,
+    "max_drawdown_pct": 10.0,
+    "kill_switch_drawdown_pct": 15.0,
+    "max_leverage": 3.0,
+    "max_position_size_pct": 10.0,
+    "max_total_exposure_pct": 50.0,
+    "consecutive_loss_pause_count": 3
+  },
+  "panda_no_alpha": {
+    "min_signal_strength": 0.5,
+    "min_edge_confidence": 0.6,
+    "min_expected_gross_edge_bps": 8.0,
+    "min_expected_net_edge_bps": 5.0,
+    "min_market_quality_score": 0.6,
+    "min_model_quality_score": 0.7
+  },
+  "panda_audit": {
+    "log_path": "./data/audit.log",
+    "enabled": true
+  }
+}

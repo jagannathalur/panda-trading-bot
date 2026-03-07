@@ -1,0 +1,17 @@
+{
+  "dry_run": true,
+  "dry_run_wallet": 10000,
+  "bot_name": "panda-trading-bot-PAPER",
+  "exchange": {
+    "pair_whitelist": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "SOL/USDT",
+      "BNB/USDT",
+      "AVAX/USDT"
+    ]
+  },
+  "internals": {
+    "process_throttle_secs": 3
+  }
+}
