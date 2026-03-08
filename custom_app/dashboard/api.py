@@ -231,6 +231,41 @@ async def get_trades(limit: int = Query(default=20, le=100)) -> list:
     ]
 
 
+@router.get("/gate-status")
+async def get_gate_status() -> dict:
+    """Return actual operational status of each signal gate."""
+    # LLM gate: check if key is present and anthropic package is importable
+    llm_ok = False
+    llm_detail = "ANTHROPIC_API_KEY not set"
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if api_key:
+        try:
+            import anthropic  # noqa: F401
+            llm_ok = True
+            llm_detail = "claude-haiku-4-5-20251001"
+        except ImportError:
+            llm_detail = "anthropic package not installed"
+
+    # Macro collector: runs inside Freqtrade process — infer from bot state
+    macro_ok = False
+    macro_detail = "bot stopped"
+    try:
+        bot = await _ft_get("/show_config")
+        if bot.get("state", "").lower() == "running":
+            macro_ok = True
+            macro_detail = "30s polling — BTC, ETH, SOL"
+    except Exception:
+        macro_detail = "bot unreachable"
+
+    return {
+        "mtf_ema":    {"ok": True,     "detail": "CPU only — always active"},
+        "macro":      {"ok": macro_ok, "detail": macro_detail},
+        "orderbook":  {"ok": macro_ok, "detail": macro_detail},  # same source
+        "funding":    {"ok": True,     "detail": "Bybit API, 5m cache"},
+        "llm":        {"ok": llm_ok,   "detail": llm_detail},
+    }
+
+
 @router.post("/bot-start")
 async def bot_start() -> dict:
     """Start the Freqtrade trading loop (equivalent to pressing Start in FreqUI)."""

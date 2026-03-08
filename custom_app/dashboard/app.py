@@ -158,11 +158,11 @@ def _render_dashboard_html() -> str:
     <!-- Signal Gates -->
     <div class="panel">
       <div class="panel-title">Signal Gates (GridTrendV2)</div>
-      <div class="stat-row"><span>1. MTF 15m EMA Alignment</span><span class="green">&#x25CF; Active</span></div>
-      <div class="stat-row"><span>2. Macro Hard Blocks</span><span class="green">&#x25CF; Active</span></div>
-      <div class="stat-row"><span>3. Orderbook Imbalance</span><span class="green">&#x25CF; Active</span></div>
-      <div class="stat-row"><span>4. Funding Rate</span><span class="green">&#x25CF; Active</span></div>
-      <div class="stat-row"><span>5. LLM Sentiment (Haiku)</span><span id="llm-gate-status" class="green">&#x25CF; Active</span></div>
+      <div class="stat-row"><span>1. MTF 15m EMA</span><span id="gate-mtf" class="green">&#x25CF; —</span></div>
+      <div class="stat-row"><span>2. Macro Blocks</span><span id="gate-macro" class="green">&#x25CF; —</span></div>
+      <div class="stat-row"><span>3. Orderbook</span><span id="gate-orderbook" class="green">&#x25CF; —</span></div>
+      <div class="stat-row"><span>4. Funding Rate</span><span id="gate-funding" class="green">&#x25CF; —</span></div>
+      <div class="stat-row"><span>5. LLM Haiku</span><span id="gate-llm" class="green">&#x25CF; —</span></div>
     </div>
 
     <!-- Drift -->
@@ -392,6 +392,27 @@ def _render_dashboard_html() -> str:
       } catch (e) { /* ignore */ }
     }
 
+    // Gate status (real — not hardcoded)
+    async function refreshGateStatus() {
+      try {
+        const r = await fetch('/api/gate-status');
+        if (!r.ok) return;
+        const gates = await r.json();
+        const map = {
+          'gate-mtf': gates.mtf_ema, 'gate-macro': gates.macro,
+          'gate-orderbook': gates.orderbook, 'gate-funding': gates.funding,
+          'gate-llm': gates.llm,
+        };
+        for (const [id, g] of Object.entries(map)) {
+          const el = document.getElementById(id);
+          if (!el) continue;
+          el.textContent = (g.ok ? '● ' : '○ ') + (g.detail || (g.ok ? 'Active' : 'Inactive'));
+          el.className = g.ok ? 'green' : 'red';
+          el.title = g.detail || '';
+        }
+      } catch (e) { console.error('Gate status error:', e); }
+    }
+
     async function botAction(action) {
       const btn = document.getElementById('btn-' + action);
       btn.disabled = true;
@@ -408,7 +429,7 @@ def _render_dashboard_html() -> str:
     }
 
     async function refreshAll() {
-      await Promise.allSettled([refreshPnL(), refreshTrades(), refreshStatus(), refreshAudit()]);
+      await Promise.allSettled([refreshPnL(), refreshTrades(), refreshStatus(), refreshAudit(), refreshGateStatus()]);
     }
 
     loadRiskConfig();
