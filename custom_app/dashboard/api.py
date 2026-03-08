@@ -24,6 +24,21 @@ _FT_AUTH = (_FT_USER, _FT_PASS)
 _FT_TIMEOUT = 5.0
 
 
+async def _ft_post(path: str) -> dict:
+    """Proxy a POST request to the Freqtrade API. Raises HTTPException on failure."""
+    url = f"{_FT_BASE}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=_FT_TIMEOUT) as client:
+            resp = await client.post(url, auth=_FT_AUTH)
+            resp.raise_for_status()
+            return resp.json()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code,
+                            detail=f"Freqtrade API error: {exc.response.text}")
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Freqtrade API unreachable: {exc}")
+
+
 async def _ft_get(path: str) -> dict | list:
     """Proxy a GET request to the Freqtrade API. Raises HTTPException on failure."""
     url = f"{_FT_BASE}{path}"
@@ -214,6 +229,18 @@ async def get_trades(limit: int = Query(default=20, le=100)) -> list:
         }
         for t in trades
     ]
+
+
+@router.post("/bot-start")
+async def bot_start() -> dict:
+    """Start the Freqtrade trading loop (equivalent to pressing Start in FreqUI)."""
+    return await _ft_post("/start")
+
+
+@router.post("/bot-stop")
+async def bot_stop() -> dict:
+    """Stop the Freqtrade trading loop without killing the process."""
+    return await _ft_post("/stop")
 
 
 # Explicitly block any attempt to change mode via API

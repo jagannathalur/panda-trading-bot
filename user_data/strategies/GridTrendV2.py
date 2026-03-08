@@ -125,6 +125,14 @@ class GridTrendV2(IStrategy):
         else:
             logger.warning("[GridTrendV2] Signal gates unavailable — trading on technical signals only")
 
+    def bot_start(self) -> None:
+        """Called by Freqtrade after the pairlist is fully resolved.
+        Use this to populate the macro collector with the actual pair list."""
+        if _SIGNALS_AVAILABLE:
+            pairs = self.dp.current_whitelist()
+            MacroSignalCollector.get_instance().start(pairs)
+            logger.info("[GridTrendV2] Macro collector updated with %d pairs: %s", len(pairs), pairs)
+
     # ------------------------------------------------------------------
     # Indicator computation
     # ------------------------------------------------------------------

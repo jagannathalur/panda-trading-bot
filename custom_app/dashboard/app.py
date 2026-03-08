@@ -95,6 +95,10 @@ def _render_dashboard_html() -> str:
     .badge-fail { background: #3a1f1f; color: var(--red); }
     .badge-warn { background: #3a2f1f; color: var(--yellow); }
     .badge-info { background: #1f2a3a; color: var(--blue); }
+    .btn { padding: 5px 14px; border: none; border-radius: 4px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .btn-start { background: var(--green); color: #fff; }
+    .btn-stop  { background: var(--red);   color: #fff; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -115,6 +119,10 @@ def _render_dashboard_html() -> str:
       <div class="stat-row"><span>Timeframe</span><span id="timeframe">—</span></div>
       <div class="stat-row"><span>Open Trades</span><span id="open-trades">0</span></div>
       <div class="stat-row"><span>Total Trades</span><span id="total-trades">0</span></div>
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <button class="btn btn-start" id="btn-start" onclick="botAction('start')">&#x25B6; Start</button>
+        <button class="btn btn-stop"  id="btn-stop"  onclick="botAction('stop')">&#x25A0; Stop</button>
+      </div>
     </div>
 
     <!-- PnL (live from trading engine) -->
@@ -150,12 +158,11 @@ def _render_dashboard_html() -> str:
     <!-- Signal Gates -->
     <div class="panel">
       <div class="panel-title">Signal Gates (GridTrendV2)</div>
-      <div class="stat-row"><span>1. Time Filter (UTC 02–04)</span><span class="green">&#x25CF; Active</span></div>
-      <div class="stat-row"><span>2. MTF 15m EMA Alignment</span><span class="green">&#x25CF; Active</span></div>
-      <div class="stat-row"><span>3. Macro Hard Blocks</span><span class="green">&#x25CF; Active</span></div>
-      <div class="stat-row"><span>4. Orderbook Imbalance</span><span class="green">&#x25CF; Active</span></div>
-      <div class="stat-row"><span>5. Funding Rate</span><span class="green">&#x25CF; Active</span></div>
-      <div class="stat-row"><span>6. LLM Sentiment (Haiku)</span><span class="green">&#x25CF; Active</span></div>
+      <div class="stat-row"><span>1. MTF 15m EMA Alignment</span><span class="green">&#x25CF; Active</span></div>
+      <div class="stat-row"><span>2. Macro Hard Blocks</span><span class="green">&#x25CF; Active</span></div>
+      <div class="stat-row"><span>3. Orderbook Imbalance</span><span class="green">&#x25CF; Active</span></div>
+      <div class="stat-row"><span>4. Funding Rate</span><span class="green">&#x25CF; Active</span></div>
+      <div class="stat-row"><span>5. LLM Sentiment (Haiku)</span><span id="llm-gate-status" class="green">&#x25CF; Active</span></div>
     </div>
 
     <!-- Drift -->
@@ -383,6 +390,21 @@ def _render_dashboard_html() -> str:
         document.getElementById('cap-drawdown').textContent =
           (cfg.max_drawdown_pct ?? 10.0).toFixed(1) + '%';
       } catch (e) { /* ignore */ }
+    }
+
+    async function botAction(action) {
+      const btn = document.getElementById('btn-' + action);
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/bot-' + action, { method: 'POST' });
+        const d = await r.json();
+        console.log('Bot ' + action + ':', d);
+        await refreshPnL();  // refresh status immediately
+      } catch (e) {
+        console.error('Bot action error:', e);
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     async function refreshAll() {
