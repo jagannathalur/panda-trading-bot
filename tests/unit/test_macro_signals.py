@@ -71,9 +71,31 @@ class TestLiqData:
         liq = LiqData("BTCUSDT", liq_volume_5min_usd=6_000_000, liq_count_5min=50)
         assert liq.is_cascade is True
 
+    def test_cascade_at_exact_threshold(self):
+        liq = LiqData("BTCUSDT", liq_volume_5min_usd=5_000_000, liq_count_5min=1)
+        assert liq.is_cascade is True  # >= not >
+
     def test_no_cascade_below_threshold(self):
         liq = LiqData("BTCUSDT", liq_volume_5min_usd=2_000_000, liq_count_5min=10)
         assert liq.is_cascade is False
+
+    def test_long_cascade_flag(self):
+        liq = LiqData("BTCUSDT", liq_volume_5min_usd=6_000_000, liq_count_5min=50,
+                      liq_long_usd=6_000_000, liq_short_usd=0.0)
+        assert liq.is_long_cascade is True
+        assert liq.is_short_cascade is False
+
+    def test_short_cascade_flag(self):
+        liq = LiqData("BTCUSDT", liq_volume_5min_usd=6_000_000, liq_count_5min=50,
+                      liq_long_usd=0.0, liq_short_usd=6_000_000)
+        assert liq.is_short_cascade is True
+        assert liq.is_long_cascade is False
+
+    def test_side_cascade_defaults_to_zero(self):
+        """Old-style LiqData without side fields should not trigger side-specific cascades."""
+        liq = LiqData("BTCUSDT", liq_volume_5min_usd=6_000_000, liq_count_5min=50)
+        assert liq.is_long_cascade is False
+        assert liq.is_short_cascade is False
 
 
 # ──────────────────────────────────────────────────────────────
@@ -174,6 +196,50 @@ class TestFetchLiquidations:
             liq = fetch_liquidations("BTCUSDT")
         assert liq is not None
         assert liq.is_cascade is True  # 100 * 50000 = $5M
+
+    def test_separates_long_and_short_liquidations(self):
+        """side=='Sell' → long liq; side=='Buy' → short liq."""
+        now_ms = int(time.time() * 1000)
+        records = [
+            # Long positions liquidated (sell to close long)
+            {"updatedTime": str(now_ms - 10_000), "size": "2.0", "price": "50000", "side": "Sell"},
+            {"updatedTime": str(now_ms - 20_000), "size": "1.0", "price": "50000", "side": "Sell"},
+            # Short positions liquidated (buy to close short / squeeze)
+            {"updatedTime": str(now_ms - 30_000), "size": "0.5", "price": "50000", "side": "Buy"},
+        ]
+        mock_resp = self._mock_liq_response(records)
+        with patch("custom_app.signals.market_microstructure.requests.get", return_value=mock_resp):
+            liq = fetch_liquidations("BTCUSDT")
+        assert liq is not None
+        assert liq.liq_long_usd == pytest.approx(150_000.0)   # (2+1) * 50000
+        assert liq.liq_short_usd == pytest.approx(25_000.0)   # 0.5 * 50000
+        assert liq.liq_volume_5min_usd == pytest.approx(175_000.0)
+
+    def test_long_cascade_detected(self):
+        """All side=='Sell' records → long cascade."""
+        now_ms = int(time.time() * 1000)
+        records = [
+            {"updatedTime": str(now_ms - 10_000), "size": "100.0", "price": "50000", "side": "Sell"},
+        ]
+        mock_resp = self._mock_liq_response(records)
+        with patch("custom_app.signals.market_microstructure.requests.get", return_value=mock_resp):
+            liq = fetch_liquidations("BTCUSDT")
+        assert liq is not None
+        assert liq.is_long_cascade is True   # 100 * 50000 = $5M of LONG liquidations
+        assert liq.is_short_cascade is False  # no short liquidations
+
+    def test_short_cascade_detected(self):
+        """All side=='Buy' records → short cascade (squeeze)."""
+        now_ms = int(time.time() * 1000)
+        records = [
+            {"updatedTime": str(now_ms - 10_000), "size": "100.0", "price": "50000", "side": "Buy"},
+        ]
+        mock_resp = self._mock_liq_response(records)
+        with patch("custom_app.signals.market_microstructure.requests.get", return_value=mock_resp):
+            liq = fetch_liquidations("BTCUSDT")
+        assert liq is not None
+        assert liq.is_short_cascade is True   # $5M of SHORT liquidations
+        assert liq.is_long_cascade is False   # no long liquidations
 
     def test_returns_none_on_error(self):
         with patch("custom_app.signals.market_microstructure.requests.get",
@@ -309,6 +375,8 @@ def _make_state(**overrides) -> MacroSignalState:
             oi_change_pct=0.0,
             liq_volume_5min_usd=0.0,
             liq_count_5min=0,
+            liq_long_usd=0.0,
+            liq_short_usd=0.0,
             orderbook_imbalance=0.5,
         )
     })
@@ -331,17 +399,53 @@ class TestMacroSignalStateBlocks:
         assert state.blocks_short("BTC/USDT:USDT") is None
 
     def test_liquidation_cascade_blocks_both_sides(self):
+        """When both long AND short cascades fire, both directions are blocked."""
         state = _make_state(pair_data={
             "BTC/USDT:USDT": PairMicroData(
                 symbol="BTCUSDT",
-                liq_volume_5min_usd=6_000_000,
+                liq_volume_5min_usd=12_000_000,
                 liq_count_5min=100,
+                liq_long_usd=6_000_000,    # long cascade
+                liq_short_usd=6_000_000,   # short cascade
                 oi_usd=0, oi_change_pct=0, orderbook_imbalance=0.5,
             )
         })
         assert state.blocks_long("BTC/USDT:USDT") is not None
         assert state.blocks_short("BTC/USDT:USDT") is not None
         assert "cascade" in state.blocks_long("BTC/USDT:USDT")
+        assert "cascade" in state.blocks_short("BTC/USDT:USDT")
+
+    def test_long_cascade_blocks_long_only(self):
+        """Long cascade = sell pressure — blocks new longs but NOT new shorts."""
+        state = _make_state(pair_data={
+            "BTC/USDT:USDT": PairMicroData(
+                symbol="BTCUSDT",
+                liq_volume_5min_usd=6_000_000,
+                liq_count_5min=100,
+                liq_long_usd=6_000_000,  # only longs being liquidated
+                liq_short_usd=0.0,
+                oi_usd=0, oi_change_pct=0, orderbook_imbalance=0.5,
+            )
+        })
+        assert state.blocks_long("BTC/USDT:USDT") is not None
+        assert "sell pressure" in state.blocks_long("BTC/USDT:USDT")
+        assert state.blocks_short("BTC/USDT:USDT") is None  # short squeeze = longs NOT blocked
+
+    def test_short_cascade_blocks_short_only(self):
+        """Short squeeze = buy pressure — blocks new shorts but NOT new longs."""
+        state = _make_state(pair_data={
+            "BTC/USDT:USDT": PairMicroData(
+                symbol="BTCUSDT",
+                liq_volume_5min_usd=6_000_000,
+                liq_count_5min=100,
+                liq_long_usd=0.0,
+                liq_short_usd=6_000_000,  # only shorts being squeezed
+                oi_usd=0, oi_change_pct=0, orderbook_imbalance=0.5,
+            )
+        })
+        assert state.blocks_short("BTC/USDT:USDT") is not None
+        assert "squeeze pressure" in state.blocks_short("BTC/USDT:USDT")
+        assert state.blocks_long("BTC/USDT:USDT") is None  # short squeeze ≠ block longs
 
     def test_extreme_fear_blocks_long_only(self):
         state = _make_state(fear_greed_value=10, fear_greed_label="Extreme Fear")
@@ -365,6 +469,7 @@ class TestMacroSignalStateBlocks:
                 symbol="BTCUSDT",
                 oi_change_pct=-8.0,
                 liq_volume_5min_usd=0, liq_count_5min=0,
+                liq_long_usd=0.0, liq_short_usd=0.0,
                 oi_usd=0, orderbook_imbalance=0.5,
             )
         })
@@ -377,6 +482,7 @@ class TestMacroSignalStateBlocks:
                 symbol="BTCUSDT",
                 oi_change_pct=25.0,
                 liq_volume_5min_usd=0, liq_count_5min=0,
+                liq_long_usd=0.0, liq_short_usd=0.0,
                 oi_usd=0, orderbook_imbalance=0.5,
             )
         })

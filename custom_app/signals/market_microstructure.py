@@ -3,8 +3,12 @@ MarketMicrostructure — Bybit public API signals.
 
 Fetches real-time market data every 30 seconds:
   - Open interest (position trend, crowding detection)
-  - Recent liquidations (cascade detection)
+  - Recent liquidations (cascade detection, split by long/short side)
   - Orderbook imbalance (immediate buying/selling pressure)
+
+Liquidation side semantics (Bybit convention):
+  side=="Sell"  → long position liquidated (exchange sold to close the long)
+  side=="Buy"   → short position liquidated (exchange bought to close the short)
 
 All endpoints are public — no API key required.
 Fail-open on errors: returns None so callers can skip checks gracefully.
@@ -51,12 +55,25 @@ class OIData:
 @dataclass(frozen=True)
 class LiqData:
     symbol: str
-    liq_volume_5min_usd: float
+    liq_volume_5min_usd: float        # total (long + short)
     liq_count_5min: int
+    liq_long_usd: float = 0.0         # long positions liquidated (side=="Sell")
+    liq_short_usd: float = 0.0        # short positions liquidated (side=="Buy")
 
     @property
     def is_cascade(self) -> bool:
+        """Total liquidation volume exceeded threshold."""
         return self.liq_volume_5min_usd >= _LIQ_CASCADE_THRESHOLD_USD
+
+    @property
+    def is_long_cascade(self) -> bool:
+        """Long positions cascading — sustained sell pressure, block new longs."""
+        return self.liq_long_usd >= _LIQ_CASCADE_THRESHOLD_USD
+
+    @property
+    def is_short_cascade(self) -> bool:
+        """Short positions cascading (squeeze) — sustained buy pressure, block new shorts."""
+        return self.liq_short_usd >= _LIQ_CASCADE_THRESHOLD_USD
 
 
 @dataclass(frozen=True)
@@ -136,14 +153,23 @@ def fetch_liquidations(symbol: str, window_ms: int = 300_000) -> Optional[LiqDat
         cutoff_ms = int(time.time() * 1000) - window_ms
         recent = [r for r in records if int(r.get("updatedTime", 0)) >= cutoff_ms]
 
-        total_usd = sum(
-            float(r.get("size", 0)) * float(r.get("price", 0))
-            for r in recent
-        )
+        total_usd = 0.0
+        long_usd = 0.0    # side=="Sell" → long position liquidated
+        short_usd = 0.0   # side=="Buy"  → short position liquidated
+        for r in recent:
+            value = float(r.get("size", 0)) * float(r.get("price", 0))
+            total_usd += value
+            if r.get("side", "") == "Sell":
+                long_usd += value
+            else:
+                short_usd += value
+
         return LiqData(
             symbol=symbol,
             liq_volume_5min_usd=round(total_usd, 2),
             liq_count_5min=len(recent),
+            liq_long_usd=round(long_usd, 2),
+            liq_short_usd=round(short_usd, 2),
         )
     except Exception as exc:
         logger.debug("[MarketMicro] Liquidation fetch failed for %s: %s", symbol, exc)

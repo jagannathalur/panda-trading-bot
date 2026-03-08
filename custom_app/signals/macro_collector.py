@@ -6,17 +6,24 @@ MacroSignalState snapshot every 30 seconds. Strategy callbacks read
 from this pre-computed state with zero additional API latency.
 
 Data collected per cycle:
-  Every 30s  : Bybit open interest, liquidations, orderbook (per pair)
+  Every 30s  : Bybit open interest, liquidations (with side), orderbook (per pair)
   Every 6h   : Fear & Greed Index (Alternative.me)
   Every 15m  : GDELT geopolitical risk score
 
 Hard blocks (evaluated in confirm_trade_entry):
-  - Liquidation cascade  : >$5M liquidated in 5 min → block both sides
+  - Long liq cascade     : long positions >$5M liquidated in 5min → block longs
+  - Short liq cascade    : short positions >$5M liquidated in 5min → block shorts
   - OI divergence        : OI declining when entering long → block long
                            OI surging when entering short → block short
   - Extreme fear (F&G<15): block longs
   - Extreme greed (F&G>85): block shorts
   - Geopolitical spike   : GDELT risk > 0.8 → block both sides
+
+Liquidation side semantics:
+  Long cascade  = longs being wiped (sell pressure) → block new longs
+  Short cascade = shorts being squeezed (buy pressure) → block new shorts
+  Previously: total cascade blocked BOTH sides regardless of which side was flushing.
+  Now: side-specific — a short squeeze no longer blocks new longs.
 
 Thread-safety: MacroSignalState reference replaced atomically under lock.
 Fail-open: if a data source is unavailable, checks using that source are skipped.
@@ -53,14 +60,19 @@ _GREED_BLOCK_SHORT_THRESHOLD = 85       # F&G > 85 = Extreme Greed → no shorts
 _GEO_SPIKE_THRESHOLD = 0.8             # GDELT risk > 0.8 → block all
 
 
+_LIQ_CASCADE_USD = 5_000_000  # $5M liquidated in 5 min = cascade
+
+
 @dataclass(frozen=True)
 class PairMicroData:
     """Per-pair microstructure snapshot."""
     symbol: str
     oi_usd: float = 0.0
     oi_change_pct: float = 0.0         # vs previous reading
-    liq_volume_5min_usd: float = 0.0
+    liq_volume_5min_usd: float = 0.0   # total liquidations
     liq_count_5min: int = 0
+    liq_long_usd: float = 0.0          # long positions liquidated (sell pressure)
+    liq_short_usd: float = 0.0         # short positions liquidated (buy/squeeze pressure)
     orderbook_imbalance: float = 0.5   # 0=asks, 1=bids, 0.5=neutral
 
 
@@ -80,8 +92,19 @@ class MacroSignalState:
     # ── Hard block checks ─────────────────────────────────────────────
 
     def is_liquidation_cascade(self, pair: str) -> bool:
+        """Total liquidation volume exceeded threshold (used for LLM context)."""
         pd = self.pair_data.get(pair)
-        return pd is not None and pd.liq_volume_5min_usd > 5_000_000
+        return pd is not None and pd.liq_volume_5min_usd >= _LIQ_CASCADE_USD
+
+    def is_long_liq_cascade(self, pair: str) -> bool:
+        """Long positions cascading (sell pressure). Block new longs."""
+        pd = self.pair_data.get(pair)
+        return pd is not None and pd.liq_long_usd >= _LIQ_CASCADE_USD
+
+    def is_short_liq_cascade(self, pair: str) -> bool:
+        """Short positions cascading/squeezed (buy pressure). Block new shorts."""
+        pd = self.pair_data.get(pair)
+        return pd is not None and pd.liq_short_usd >= _LIQ_CASCADE_USD
 
     def is_oi_declining_long_block(self, pair: str) -> bool:
         """Block new longs when open interest is falling (longs closing)."""
@@ -95,10 +118,10 @@ class MacroSignalState:
 
     def blocks_long(self, pair: str) -> Optional[str]:
         """Return reason string if long should be blocked, else None."""
-        if self.is_liquidation_cascade(pair):
+        if self.is_long_liq_cascade(pair):
             pd = self.pair_data.get(pair)
-            vol = pd.liq_volume_5min_usd if pd else 0
-            return f"liquidation cascade ${vol:,.0f} in 5min"
+            vol = pd.liq_long_usd if pd else 0
+            return f"long liquidation cascade ${vol:,.0f} in 5min — sell pressure"
         if self.fear_greed_value < _FEAR_BLOCK_LONG_THRESHOLD:
             return f"extreme fear (F&G={self.fear_greed_value})"
         if self.geo_risk_score > _GEO_SPIKE_THRESHOLD:
@@ -111,10 +134,10 @@ class MacroSignalState:
 
     def blocks_short(self, pair: str) -> Optional[str]:
         """Return reason string if short should be blocked, else None."""
-        if self.is_liquidation_cascade(pair):
+        if self.is_short_liq_cascade(pair):
             pd = self.pair_data.get(pair)
-            vol = pd.liq_volume_5min_usd if pd else 0
-            return f"liquidation cascade ${vol:,.0f} in 5min"
+            vol = pd.liq_short_usd if pd else 0
+            return f"short liquidation cascade ${vol:,.0f} in 5min — squeeze pressure"
         if self.fear_greed_value > _GREED_BLOCK_SHORT_THRESHOLD:
             return f"extreme greed (F&G={self.fear_greed_value})"
         if self.geo_risk_score > _GEO_SPIKE_THRESHOLD:
@@ -251,6 +274,8 @@ class MacroSignalCollector:
                 oi_change_pct=oi.oi_change_pct if oi else 0.0,
                 liq_volume_5min_usd=liq.liq_volume_5min_usd if liq else 0.0,
                 liq_count_5min=liq.liq_count_5min if liq else 0,
+                liq_long_usd=liq.liq_long_usd if liq else 0.0,
+                liq_short_usd=liq.liq_short_usd if liq else 0.0,
                 orderbook_imbalance=ob.imbalance if ob else 0.5,
             )
 
