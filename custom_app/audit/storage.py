@@ -45,7 +45,7 @@ def query_audit_log(
                     continue
             results.append(evt)
 
-    return list(reversed(results))[-limit:]
+    return list(reversed(results))[:limit]
 
 
 def export_audit_log_json(log_path: str, output_path: str) -> int:

@@ -52,6 +52,8 @@ class AuditEventType(StrEnum):
     MONITOR_RUN = "monitor.run"
     MONITOR_USER_NOTE_READ = "monitor.user_note_read"
     MONITOR_STRATEGY_DECISION = "monitor.strategy_decision"
+    WEEKLY_REVIEW_RUN = "review.weekly_run"
+    WEEKLY_REVIEW_DECISION = "review.weekly_decision"
 
 
 @dataclass

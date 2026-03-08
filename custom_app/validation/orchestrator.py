@@ -108,9 +108,17 @@ class ValidationOrchestrator:
             self._config.shadow_min_hours,
         )
 
-        artifact.passed = True
+        artifact.shadow_report = {
+            "status": "pending",
+            "required_min_hours": self._config.shadow_min_hours,
+            "note": "Paper shadow must complete before this artifact can pass.",
+        }
+        artifact.fail_reason = (
+            f"Paper shadow pending: run shadow mode for at least "
+            f"{self._config.shadow_min_hours}h before promotion."
+        )
         saved_path = artifact.save(self._config.artifacts_dir)
-        logger.info("[Validation] Artifact saved: %s", saved_path)
+        logger.info("[Validation] Shadow pending artifact saved: %s", saved_path)
 
         self._audit_completion(artifact)
         return artifact

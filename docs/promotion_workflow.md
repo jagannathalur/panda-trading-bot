@@ -59,6 +59,11 @@ Each promotion artifact contains:
 - `passed` — boolean
 - `fail_reason` — if not passed
 
+Automated validation does not mark an artifact as passed until the paper shadow report exists.
+Backtest plus walk-forward may produce a saved artifact in a pending state, but that artifact is
+not eligible for promotion until shadow validation is attached and the artifact passes freshness
+checks.
+
 ## Enabling Real Trading (Separate Operator Action)
 
 Reaching `full_live` promotion state does NOT enable real trading.

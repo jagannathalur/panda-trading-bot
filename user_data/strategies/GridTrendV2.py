@@ -7,7 +7,8 @@ Upgrades from V1:
   - Funding rate gate            (avoids costly perpetual positions)
   - LLM sentiment gate           (Claude Haiku as final filter)
   - Volatility-aware sizing      (ATR scales position size)
-  - 30s macro signal polling     (liquidations, OI, F&G, geopolitical)
+  - 30s macro signal polling     (liquidations, OI, F&G)
+  - Geopolitical gate            (GDELT, fetched only for candidate trades)
   - MTF 15m EMA alignment        (blocks entries against the higher-timeframe trend)
   - Orderbook imbalance gate     (blocks entries into adverse order pressure)
   - Side-aware liq cascade       (long cascade ≠ short squeeze — handled separately)
@@ -16,10 +17,11 @@ Gate order (cheapest first — LLM is last):
   1. Technical signal (EMA crossover + RSI)
   2. Time filter (02:00–04:00 UTC blocked)
   3. MTF 15m EMA alignment (CPU only — fail-open)
-  4. Macro hard blocks (side-aware liq cascade, F&G extreme, geo spike, OI divergence)
+  4. Macro hard blocks (side-aware liq cascade, F&G extreme, OI divergence)
   5. Orderbook imbalance gate (free, already in macro state — no extra API call)
   6. Funding rate check (free Bybit API, cached 5 min)
-  7. LLM sentiment (Claude Haiku, cached 15 min, ~$0.0004/call, enriched with macro)
+  7. Geopolitical gate (GDELT, cached 15 min, fetched on-demand)
+  8. LLM sentiment (Claude Haiku, cached 15 min, ~$0.0004/call, enriched with macro)
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from dataclasses import replace as dataclass_replace
 from typing import Optional
 
 # Add project root to path so custom_app is importable.
@@ -46,6 +49,7 @@ logger = logging.getLogger(__name__)
 # Import signal gates — degrade gracefully if unavailable
 try:
     from custom_app.signals.funding_rate import FundingRateGate
+    from custom_app.signals.geopolitical import GeopoliticalGate
     from custom_app.signals.llm_sentiment import LLMSentimentGate
     from custom_app.signals.news_fetcher import NewsFetcher
     from custom_app.signals.macro_collector import MacroSignalCollector
@@ -56,6 +60,9 @@ except ImportError:
     logger.warning("[GridTrendV2] custom_app.signals not available — running without LLM/funding gates")
     _SIGNALS_AVAILABLE = False
     OI_SURGE_PCT = 20.0  # fallback constant if signals module unavailable
+
+
+_GEO_SPIKE_THRESHOLD = 0.8
 
 
 class GridTrendV2(IStrategy):
@@ -112,10 +119,12 @@ class GridTrendV2(IStrategy):
     def __init__(self, config: dict) -> None:
         super().__init__(config)
         self._funding_gate: Optional[FundingRateGate] = None
+        self._geo_gate: Optional[GeopoliticalGate] = None
         self._sentiment_gate: Optional[LLMSentimentGate] = None
         self._news_fetcher: Optional[NewsFetcher] = None
         if _SIGNALS_AVAILABLE:
             self._funding_gate = FundingRateGate()
+            self._geo_gate = GeopoliticalGate()
             self._sentiment_gate = LLMSentimentGate()
             self._news_fetcher = NewsFetcher()
             # Start 30-second background macro signal collector
@@ -223,10 +232,11 @@ class GridTrendV2(IStrategy):
         Final pre-order gate. Runs AFTER technical signal, risk engine, and no-alpha gate.
         Checks (cheapest first):
           1. MTF 15m EMA alignment (CPU only — fail-open)
-          2. Macro hard blocks (side-aware liq cascade, F&G extreme, geo spike, OI divergence)
+          2. Macro hard blocks (side-aware liq cascade, F&G extreme, OI divergence)
           3. Orderbook imbalance gate (free, already in macro state)
           4. Funding rate (free, cached)
-          5. LLM sentiment (Claude Haiku, cached 15 min, enriched with macro context)
+          5. Geopolitical risk (cached 15 min, on-demand to reduce GDELT calls)
+          6. LLM sentiment (Claude Haiku, cached 15 min, enriched with macro context)
         Returns False to silently cancel the order.
         """
         # 1. MTF 15m EMA alignment — block entries against the higher-timeframe trend
@@ -269,10 +279,25 @@ class GridTrendV2(IStrategy):
             if macro_context is not None:
                 rate = self._funding_gate.get_last_rate(pair)
                 if rate is not None:
-                    from dataclasses import replace as _replace
-                    macro_context = _replace(macro_context, funding_rate_pct=rate * 100)
+                    macro_context = dataclass_replace(macro_context, funding_rate_pct=rate * 100)
 
-        # 5. LLM sentiment gate (last — most expensive per call but rare)
+        # 5. Geopolitical gate (cached by GeopoliticalGate, fetched only for candidate trades)
+        if self._geo_gate is not None:
+            geo_risk = self._geo_gate.get_risk()
+            if macro_context is not None:
+                macro_context = dataclass_replace(
+                    macro_context,
+                    geo_risk_score=geo_risk.score,
+                    geo_risk_summary=geo_risk.summary,
+                )
+            if geo_risk.score > _GEO_SPIKE_THRESHOLD:
+                logger.info(
+                    "[GridTrendV2] Geopolitical gate blocked %s %s (score=%.2f, %s)",
+                    side, pair, geo_risk.score, geo_risk.summary,
+                )
+                return False
+
+        # 6. LLM sentiment gate (last — most expensive per call but rare)
         if self._sentiment_gate is not None and self._news_fetcher is not None:
             headlines = self._news_fetcher.fetch(pair)
             result = self._sentiment_gate.evaluate(pair, side, headlines, macro_context)

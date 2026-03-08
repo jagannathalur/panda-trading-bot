@@ -1,7 +1,7 @@
 # =========================================================
 # Panda Trading Bot — Makefile
 # =========================================================
-.PHONY: help setup install run-paper run-real backtest walk-forward shadow \
+.PHONY: help setup install run-paper run-real backtest walk-forward shadow weekly-review \
         promote dashboard test test-unit test-integration test-regression \
         test-coverage verify-mode-lock emergency-flatten lint format clean \
         docker-up docker-down docker-logs
@@ -52,6 +52,9 @@ walk-forward: ## Run walk-forward validation
 shadow: ## Run paper shadow mode
 	bash scripts/run_shadow.sh
 
+weekly-review: ## Generate weekly strategy review artifact
+	$(PYTHON) scripts/weekly_strategy_review.py
+
 promote: ## Run promotion workflow
 	bash scripts/promote_strategy.sh
 
@@ -66,10 +69,18 @@ test-unit: ## Run unit tests
 	$(PYTHON) -m pytest tests/unit/ -v --tb=short
 
 test-integration: ## Run integration tests
-	$(PYTHON) -m pytest tests/integration/ -v --tb=short
+	@if ls tests/integration/test_*.py >/dev/null 2>&1; then \
+		$(PYTHON) -m pytest tests/integration/ -v --tb=short; \
+	else \
+		echo "No integration tests found in tests/integration/"; \
+	fi
 
 test-regression: ## Run regression tests
-	$(PYTHON) -m pytest tests/regression/ -v --tb=short
+	@if ls tests/regression/test_*.py >/dev/null 2>&1; then \
+		$(PYTHON) -m pytest tests/regression/ -v --tb=short; \
+	else \
+		echo "No regression tests found in tests/regression/"; \
+	fi
 
 test-coverage: ## Run tests with coverage report
 	$(PYTHON) -m pytest tests/ --cov=custom_app --cov-report=html --cov-report=term-missing --cov-fail-under=80

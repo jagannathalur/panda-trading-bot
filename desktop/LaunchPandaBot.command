@@ -41,9 +41,11 @@ cd "$PROJECT_DIR"
 STRATEGY="${FREQTRADE_STRATEGY:-GridTrendV2}"
 if [[ "${TRADING_MODE:-paper}" == "real" ]]; then
     CONFIG_FLAGS="--config configs/base.json --config configs/real.json"
+    DB_URL="sqlite:///$PROJECT_DIR/tradesv3.sqlite"
     echo "⚠️  REAL TRADING MODE — using real capital"
 else
     CONFIG_FLAGS="--config configs/base.json --config configs/futures_paper.json"
+    DB_URL="sqlite:///$PROJECT_DIR/tradesv3.dryrun.sqlite"
     echo "Paper mode — simulated capital only"
 fi
 
@@ -56,7 +58,7 @@ tell application "Terminal"
     set botTab to do script "cd '$PROJECT_DIR' && source .env && \\
         export PYTHONPATH='$PROJECT_DIR' && \\
         echo '--- Freqtrade Bot ($STRATEGY) ---' && \\
-        freqtrade trade $CONFIG_FLAGS --strategy $STRATEGY --userdir user_data --logfile user_data/logs/paper.log; \\
+        freqtrade trade $CONFIG_FLAGS --db-url '$DB_URL' --strategy $STRATEGY --userdir user_data --logfile user_data/logs/paper.log; \\
         echo 'Bot exited — press Enter to close'; read"
 
     -- Tab 2: Custom ops dashboard

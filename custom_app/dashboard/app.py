@@ -95,10 +95,13 @@ def _render_dashboard_html() -> str:
     .badge-fail { background: #3a1f1f; color: var(--red); }
     .badge-warn { background: #3a2f1f; color: var(--yellow); }
     .badge-info { background: #1f2a3a; color: var(--blue); }
+    .review-copy { color: var(--text); white-space: pre-wrap; line-height: 1.5; }
+    .muted-copy { color: var(--muted); }
     .btn { padding: 5px 14px; border: none; border-radius: 4px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
     .btn-start { background: var(--green); color: #fff; }
     .btn-stop  { background: var(--red);   color: #fff; }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-secondary { background: var(--blue); color: #fff; }
   </style>
 </head>
 <body>
@@ -197,6 +200,27 @@ def _render_dashboard_html() -> str:
           <tr><td id="promo-strategy">GridTrendV2</td><td>2.0.0</td><td><span class="badge badge-info">PAPER_ACTIVE</span></td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Weekly Review -->
+    <div class="panel wide">
+      <div class="panel-title">Weekly Strategy Review</div>
+      <div class="stat-row"><span>Review Window</span><span id="weekly-review-window">—</span></div>
+      <div class="stat-row"><span>Recommendation</span><span id="weekly-review-badge"><span class="badge badge-info">No review</span></span></div>
+      <div class="stat-row"><span>Operator Decision</span><span id="weekly-review-decision" class="muted-copy">Pending</span></div>
+      <div class="stat-row"><span>Model</span><span id="weekly-review-model">—</span></div>
+      <div style="margin-top:10px">
+        <div class="panel-title">Summary</div>
+        <div id="weekly-review-summary" class="review-copy muted-copy">No weekly review has been generated yet.</div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="panel-title">Recommended Changes</div>
+        <div id="weekly-review-changes" class="review-copy muted-copy">—</div>
+      </div>
+      <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="weeklyDecision('accept')">Yes - Research Change</button>
+        <button class="btn btn-stop" onclick="weeklyDecision('reject')">No - Keep Current Algo</button>
+      </div>
     </div>
 
     <!-- Audit Log -->
@@ -379,6 +403,57 @@ def _render_dashboard_html() -> str:
       } catch (e) { /* ignore */ }
     }
 
+    async function refreshWeeklyReview() {
+      try {
+        const r = await fetch('/api/weekly-review');
+        if (!r.ok) return;
+        const review = await r.json();
+
+        const windowEl = document.getElementById('weekly-review-window');
+        const badgeEl = document.getElementById('weekly-review-badge');
+        const decisionEl = document.getElementById('weekly-review-decision');
+        const modelEl = document.getElementById('weekly-review-model');
+        const summaryEl = document.getElementById('weekly-review-summary');
+        const changesEl = document.getElementById('weekly-review-changes');
+
+        if (review.status === 'unavailable') {
+          windowEl.textContent = '—';
+          badgeEl.innerHTML = '<span class="badge badge-info">No review</span>';
+          decisionEl.textContent = 'Pending';
+          decisionEl.className = 'muted-copy';
+          modelEl.textContent = '—';
+          summaryEl.textContent = review.summary || 'No weekly review has been generated yet.';
+          summaryEl.className = 'review-copy muted-copy';
+          changesEl.textContent = '—';
+          changesEl.className = 'review-copy muted-copy';
+          return;
+        }
+
+        const badgeClass = review.recommendation === 'continue'
+          ? 'badge-pass'
+          : review.recommendation === 'monitor'
+          ? 'badge-warn'
+          : 'badge-fail';
+        const decision = review.operator_decision?.decision || 'pending';
+        const decisionText = decision === 'pending'
+          ? 'Pending'
+          : `${decision.toUpperCase()}${review.operator_decision?.notes ? ' - ' + review.operator_decision.notes : ''}`;
+
+        windowEl.textContent = `${new Date(review.period_start).toLocaleDateString()} -> ${new Date(review.period_end).toLocaleDateString()}`;
+        badgeEl.innerHTML = `<span class="badge ${badgeClass}">${review.recommendation}</span>`;
+        decisionEl.textContent = decisionText;
+        decisionEl.className = decision === 'accept' ? 'green' : decision === 'reject' ? 'red' : 'muted-copy';
+        modelEl.textContent = review.model || '—';
+        summaryEl.textContent = review.summary || review.headline || '—';
+        summaryEl.className = 'review-copy';
+        const changes = Array.isArray(review.recommended_changes) && review.recommended_changes.length
+          ? review.recommended_changes.map(item => '- ' + item).join('\n')
+          : 'No bounded changes recommended.';
+        changesEl.textContent = changes;
+        changesEl.className = 'review-copy';
+      } catch (e) { console.error('Weekly review refresh error:', e); }
+    }
+
     // Load risk config once (caps don't change at runtime)
     async function loadRiskConfig() {
       try {
@@ -428,8 +503,27 @@ def _render_dashboard_html() -> str:
       }
     }
 
+    async function weeklyDecision(decision) {
+      const notes = window.prompt('Optional note for this weekly review decision:', '') || '';
+      try {
+        const r = await fetch('/api/weekly-review/decision', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision, notes }),
+        });
+        if (!r.ok) {
+          console.error('Weekly decision failed:', await r.text());
+          return;
+        }
+        await refreshWeeklyReview();
+        await refreshAudit();
+      } catch (e) {
+        console.error('Weekly decision error:', e);
+      }
+    }
+
     async function refreshAll() {
-      await Promise.allSettled([refreshPnL(), refreshTrades(), refreshStatus(), refreshAudit(), refreshGateStatus()]);
+      await Promise.allSettled([refreshPnL(), refreshTrades(), refreshStatus(), refreshAudit(), refreshGateStatus(), refreshWeeklyReview()]);
     }
 
     loadRiskConfig();

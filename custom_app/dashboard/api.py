@@ -13,15 +13,28 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
 # Freqtrade REST API connection
 _FT_BASE = os.environ.get("FREQTRADE_API_URL", "http://127.0.0.1:8081/api/v1")
-_FT_USER = os.environ.get("FREQTRADE_API_USER", "freqtrade")
-_FT_PASS = os.environ.get("FREQTRADE_API_PASS", "change-me")
+_FT_USER = os.environ.get(
+    "FREQTRADE_API_USERNAME",
+    os.environ.get("FREQTRADE_API_USER", "freqtrade"),
+)
+_FT_PASS = os.environ.get(
+    "FREQTRADE_API_PASSWORD",
+    os.environ.get("FREQTRADE_API_PASS", "change-me"),
+)
 _FT_AUTH = (_FT_USER, _FT_PASS)
 _FT_TIMEOUT = 5.0
+
+
+class WeeklyReviewDecisionRequest(BaseModel):
+    """Operator decision to accept or reject a weekly recommendation."""
+    decision: str = Field(pattern="^(accept|reject)$")
+    notes: str = ""
 
 
 async def _ft_post(path: str) -> dict:
@@ -136,6 +149,41 @@ async def get_promotion_status() -> list:
         from custom_app.promotion import StrategyRegistry
         registry = StrategyRegistry()
         return registry.all_statuses()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/weekly-review")
+async def get_weekly_review() -> dict:
+    """Return the latest saved weekly strategy review, if any."""
+    try:
+        from custom_app.reviews import load_latest_weekly_review
+
+        review = load_latest_weekly_review()
+        if review is None:
+            return {
+                "status": "unavailable",
+                "recommendation": "none",
+                "summary": "No weekly strategy review has been generated yet.",
+                "recommended_changes": [],
+                "operator_decision": None,
+            }
+        return review
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/weekly-review/decision")
+async def decide_weekly_review(req: WeeklyReviewDecisionRequest) -> dict:
+    """Record a yes/no operator decision on the latest weekly review."""
+    try:
+        from custom_app.reviews import record_weekly_review_decision
+
+        return record_weekly_review_decision(req.decision, notes=req.notes)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

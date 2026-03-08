@@ -8,7 +8,6 @@ from this pre-computed state with zero additional API latency.
 Data collected per cycle:
   Every 30s  : Bybit open interest, liquidations (with side), orderbook (per pair)
   Every 6h   : Fear & Greed Index (Alternative.me)
-  Every 15m  : GDELT geopolitical risk score
 
 Hard blocks (evaluated in confirm_trade_entry):
   - Long liq cascade     : long positions >$5M liquidated in 5min → block longs
@@ -17,7 +16,10 @@ Hard blocks (evaluated in confirm_trade_entry):
                            OI surging when entering short → block short
   - Extreme fear (F&G<15): block longs
   - Extreme greed (F&G>85): block shorts
-  - Geopolitical spike   : GDELT risk > 0.8 → block both sides
+
+Geopolitical risk is fetched on-demand later in the strategy pipeline, right
+before the LLM gate, so we avoid spending GDELT quota on cycles that never
+produce a candidate trade.
 
 Liquidation side semantics:
   Long cascade  = longs being wiped (sell pressure) → block new longs
@@ -46,8 +48,6 @@ from custom_app.signals.market_microstructure import (
     pair_to_symbol,
     LIQ_CASCADE_USD, OI_SURGE_PCT, OI_DECLINE_PCT,
 )
-from custom_app.signals.geopolitical import GeopoliticalGate, GeopoliticalRisk
-
 logger = logging.getLogger(__name__)
 
 _POLL_INTERVAL_SECONDS = 30
@@ -58,9 +58,6 @@ _FEAR_GREED_REQUEST_TIMEOUT = 5
 # Block thresholds
 _FEAR_BLOCK_LONG_THRESHOLD = 15         # F&G < 15 = Extreme Fear → no longs
 _GREED_BLOCK_SHORT_THRESHOLD = 85       # F&G > 85 = Extreme Greed → no shorts
-_GEO_SPIKE_THRESHOLD = 0.8             # GDELT risk > 0.8 → block all
-
-
 # Thresholds imported from market_microstructure — single source of truth:
 # LIQ_CASCADE_USD, OI_SURGE_PCT, OI_DECLINE_PCT
 
@@ -126,8 +123,6 @@ class MacroSignalState:
             return f"long liquidation cascade ${vol:,.0f} in 5min — sell pressure"
         if self.fear_greed_value < _FEAR_BLOCK_LONG_THRESHOLD:
             return f"extreme fear (F&G={self.fear_greed_value})"
-        if self.geo_risk_score > _GEO_SPIKE_THRESHOLD:
-            return f"geopolitical crisis (score={self.geo_risk_score:.2f})"
         if self.is_oi_declining_long_block(pair):
             pd = self.pair_data.get(pair)
             chg = pd.oi_change_pct if pd else 0
@@ -142,8 +137,6 @@ class MacroSignalState:
             return f"short liquidation cascade ${vol:,.0f} in 5min — squeeze pressure"
         if self.fear_greed_value > _GREED_BLOCK_SHORT_THRESHOLD:
             return f"extreme greed (F&G={self.fear_greed_value})"
-        if self.geo_risk_score > _GEO_SPIKE_THRESHOLD:
-            return f"geopolitical crisis (score={self.geo_risk_score:.2f})"
         if self.is_oi_surging_short_block(pair):
             pd = self.pair_data.get(pair)
             chg = pd.oi_change_pct if pd else 0
@@ -208,8 +201,7 @@ class MacroSignalCollector:
         self._pairs: list[str] = []
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
-        self._geo_gate = GeopoliticalGate()
-        # Fear & Greed cache (separate from geo since TTL is 6h)
+        # Fear & Greed cache (6h TTL)
         self._fg_cache: Optional[tuple[float, int, str]] = None  # (fetch_time, value, label)
 
     @classmethod
@@ -289,14 +281,12 @@ class MacroSignalCollector:
             )
 
         fg_value, fg_label = self._fetch_fear_greed()
-        geo = self._geo_gate.get_risk()
-
         new_state = MacroSignalState(
             pair_data=pair_data,
             fear_greed_value=fg_value,
             fear_greed_label=fg_label,
-            geo_risk_score=geo.score,
-            geo_risk_summary=geo.summary,
+            geo_risk_score=0.0,
+            geo_risk_summary="deferred",
             fetched_at=time.monotonic(),
         )
 
@@ -304,8 +294,8 @@ class MacroSignalCollector:
             self._state = new_state
 
         logger.debug(
-            "[MacroCollector] Cycle done — F&G=%d (%s), Geo=%.2f, pairs=%d",
-            fg_value, fg_label, geo.score, len(pair_data),
+            "[MacroCollector] Cycle done — F&G=%d (%s), pairs=%d",
+            fg_value, fg_label, len(pair_data),
         )
 
         # Log any active hard blocks for visibility

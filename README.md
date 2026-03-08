@@ -128,7 +128,9 @@ cp .env.example .env
 # Edit .env — set ANTHROPIC_API_KEY for LLM gate
 
 # 3. Run paper mode on Bybit futures (can_short requires futures)
-freqtrade trade --config configs/futures_paper.json \
+freqtrade trade --config configs/base.json \
+                --config configs/futures_paper.json \
+                --db-url "sqlite:///$PWD/tradesv3.dryrun.sqlite" \
                 --strategy GridTrendV2 \
                 --logfile /tmp/ft.log &
 

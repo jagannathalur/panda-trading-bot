@@ -458,11 +458,6 @@ class TestMacroSignalStateBlocks:
         assert state.blocks_short("BTC/USDT:USDT") is not None
         assert state.blocks_long("BTC/USDT:USDT") is None
 
-    def test_geo_spike_blocks_both_sides(self):
-        state = _make_state(geo_risk_score=0.85, geo_risk_summary="crisis")
-        assert state.blocks_long("BTC/USDT:USDT") is not None
-        assert state.blocks_short("BTC/USDT:USDT") is not None
-
     def test_oi_declining_blocks_long(self):
         state = _make_state(pair_data={
             "BTC/USDT:USDT": PairMicroData(
@@ -545,6 +540,20 @@ class TestMacroSignalCollector:
 
         assert not errors
         assert len(results) == 20
+
+    def test_fetch_cycle_defers_geopolitical_state(self):
+        collector = MacroSignalCollector.get_instance()
+        collector._pairs = ["BTC/USDT:USDT"]
+
+        with patch("custom_app.signals.macro_collector.fetch_open_interest", return_value=None), \
+             patch("custom_app.signals.macro_collector.fetch_liquidations", return_value=None), \
+             patch("custom_app.signals.macro_collector.fetch_orderbook_imbalance", return_value=None), \
+             patch.object(collector, "_fetch_fear_greed", return_value=(12, "Extreme Fear")):
+            collector._fetch_cycle()
+
+        state = collector.get_state("BTC/USDT:USDT")
+        assert state.geo_risk_score == 0.0
+        assert state.geo_risk_summary == "deferred"
 
 
 # ──────────────────────────────────────────────────────────────
