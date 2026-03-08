@@ -7,7 +7,6 @@ Upgrades from V1:
   - Funding rate gate            (avoids costly perpetual positions)
   - LLM sentiment gate           (Claude Haiku as final filter)
   - Volatility-aware sizing      (ATR scales position size)
-  - Time filter                  (avoid low-liquidity windows)
   - 30s macro signal polling     (liquidations, OI, F&G, geopolitical)
   - MTF 15m EMA alignment        (blocks entries against the higher-timeframe trend)
   - Orderbook imbalance gate     (blocks entries into adverse order pressure)
@@ -28,7 +27,6 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from datetime import datetime, timezone
 from typing import Optional
 
 # Add project root to path so custom_app is importable.
@@ -216,25 +214,18 @@ class GridTrendV2(IStrategy):
         """
         Final pre-order gate. Runs AFTER technical signal, risk engine, and no-alpha gate.
         Checks (cheapest first):
-          1. Time filter (avoid 02:00–04:00 UTC low-liquidity window)
-          2. MTF 15m EMA alignment (CPU only — fail-open)
-          3. Macro hard blocks (side-aware liq cascade, F&G extreme, geo spike, OI divergence)
-          4. Orderbook imbalance gate (free, already in macro state)
-          5. Funding rate (free, cached)
-          6. LLM sentiment (Claude Haiku, cached 15 min, enriched with macro context)
+          1. MTF 15m EMA alignment (CPU only — fail-open)
+          2. Macro hard blocks (side-aware liq cascade, F&G extreme, geo spike, OI divergence)
+          3. Orderbook imbalance gate (free, already in macro state)
+          4. Funding rate (free, cached)
+          5. LLM sentiment (Claude Haiku, cached 15 min, enriched with macro context)
         Returns False to silently cancel the order.
         """
-        # 1. Time filter — avoid 02:00–04:00 UTC (thin markets, wide spreads)
-        current_hour = datetime.now(timezone.utc).hour
-        if 2 <= current_hour < 4:
-            logger.info("[GridTrendV2] Time filter: skipping %s %s during low-liquidity window", side, pair)
-            return False
-
-        # 2. MTF 15m EMA alignment — block entries against the higher-timeframe trend
+        # 1. MTF 15m EMA alignment — block entries against the higher-timeframe trend
         if not self._check_mtf_ema(pair, side):
             return False
 
-        # 3. Macro hard blocks (pre-computed by background thread — zero latency)
+        # 2. Macro hard blocks (pre-computed by background thread — zero latency)
         macro_context = None
         if _SIGNALS_AVAILABLE:
             macro_state = MacroSignalCollector.get_instance().get_state(pair)
@@ -249,7 +240,7 @@ class GridTrendV2(IStrategy):
                 )
                 return False
 
-            # 4. Orderbook imbalance gate (free — already in macro state, no extra API call)
+            # 3. Orderbook imbalance gate (free — already in macro state, no extra API call)
             pair_micro = macro_state.pair_data.get(pair)
             if pair_micro is not None:
                 if not orderbook_allows_entry(pair_micro.orderbook_imbalance, side):
@@ -261,7 +252,7 @@ class GridTrendV2(IStrategy):
 
             macro_context = macro_state.to_macro_context(pair)
 
-        # 5. Funding rate gate (futures only — fast, free)
+        # 4. Funding rate gate (futures only — fast, free)
         if self._funding_gate is not None:
             if not self._funding_gate.check(pair, side):
                 logger.info("[GridTrendV2] Funding rate blocked %s %s", side, pair)
@@ -273,7 +264,7 @@ class GridTrendV2(IStrategy):
                     from dataclasses import replace as _replace
                     macro_context = _replace(macro_context, funding_rate_pct=rate * 100)
 
-        # 6. LLM sentiment gate (last — most expensive per call but rare)
+        # 5. LLM sentiment gate (last — most expensive per call but rare)
         if self._sentiment_gate is not None and self._news_fetcher is not None:
             headlines = self._news_fetcher.fetch(pair)
             result = self._sentiment_gate.evaluate(pair, side, headlines, macro_context)

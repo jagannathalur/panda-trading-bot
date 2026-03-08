@@ -35,12 +35,11 @@ A production-grade algorithmic crypto trading platform built on top of [Freqtrad
 │  audit        │ validation │ metrics     │ config    │ replay        │
 │                                                                      │
 │  Signal Gates (GridTrendV2 — cheapest first):                        │
-│  1. Time filter (UTC 02-04 blocked)                                  │
-│  2. MTF 15m EMA alignment (CPU only, fail-open)                      │
-│  3. Macro hard blocks (liq cascade, Fear&Greed, geo, OI divergence)  │
-│  4. Orderbook imbalance gate (free, pre-computed)                    │
-│  5. Funding rate gate (Bybit API, 5-min cache)                       │
-│  6. LLM sentiment gate (Claude Haiku, 15-min cache, macro-enriched)  │
+│  1. MTF 15m EMA alignment (CPU only, fail-open)                      │
+│  2. Macro hard blocks (liq cascade, Fear&Greed, geo, OI divergence)  │
+│  3. Orderbook imbalance gate (free, pre-computed)                    │
+│  4. Funding rate gate (Bybit API, 5-min cache)                       │
+│  5. LLM sentiment gate (Claude Haiku, 15-min cache, macro-enriched)  │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Macro Signal Collector (30s background daemon)                      │
 │  Bybit: open interest │ liquidations (side-aware) │ orderbook        │
@@ -94,7 +93,6 @@ EMA crossover long+short strategy with a 6-gate AI filter pipeline.
 
 | Gate | Description | Cost |
 |------|-------------|------|
-| Time filter | Block 02:00–04:00 UTC (low liquidity) | Free |
 | MTF 15m EMA | Block entries against 15m trend | CPU only |
 | Macro blocks | Liq cascade, F&G extreme, geo spike, OI divergence | Pre-computed |
 | Orderbook | Block into asks domination (long) or bids domination (short) | Pre-computed |
