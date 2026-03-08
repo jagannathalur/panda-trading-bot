@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 _BYBIT_BASE = "https://api.bybit.com/v5/market"
 _REQUEST_TIMEOUT = 5
 
-# Hard thresholds
-_LIQ_CASCADE_THRESHOLD_USD = 5_000_000   # $5M liquidated in 5 min = cascade
-_OI_DECLINE_THRESHOLD_PCT = -5.0          # OI dropped >5% = weakening conviction
-_OI_SURGE_THRESHOLD_PCT = 20.0            # OI surged >20% = crowded trade
-_OB_BID_DOMINATED = 0.65                  # imbalance > 0.65 = strong buy pressure
-_OB_ASK_DOMINATED = 0.35                  # imbalance < 0.35 = strong sell pressure
+# Hard thresholds — single source of truth, imported by macro_collector and strategy
+LIQ_CASCADE_USD = 5_000_000   # $5M liquidated in 5 min = cascade
+OI_DECLINE_PCT  = -5.0         # OI dropped >5% = weakening long conviction
+OI_SURGE_PCT    = 20.0         # OI surged >20% = crowded trade (block short, halve stake)
+OB_BID_DOMINATED = 0.65        # imbalance > 0.65 = strong buy pressure
+OB_ASK_DOMINATED = 0.35        # imbalance < 0.35 = strong sell pressure
 
 
 @dataclass(frozen=True)
@@ -45,11 +45,11 @@ class OIData:
 
     @property
     def is_declining(self) -> bool:
-        return self.oi_change_pct < _OI_DECLINE_THRESHOLD_PCT
+        return self.oi_change_pct < OI_DECLINE_PCT
 
     @property
     def is_crowded(self) -> bool:
-        return self.oi_change_pct > _OI_SURGE_THRESHOLD_PCT
+        return self.oi_change_pct > OI_SURGE_PCT
 
 
 @dataclass(frozen=True)
@@ -63,17 +63,17 @@ class LiqData:
     @property
     def is_cascade(self) -> bool:
         """Total liquidation volume exceeded threshold."""
-        return self.liq_volume_5min_usd >= _LIQ_CASCADE_THRESHOLD_USD
+        return self.liq_volume_5min_usd >= LIQ_CASCADE_USD
 
     @property
     def is_long_cascade(self) -> bool:
         """Long positions cascading — sustained sell pressure, block new longs."""
-        return self.liq_long_usd >= _LIQ_CASCADE_THRESHOLD_USD
+        return self.liq_long_usd >= LIQ_CASCADE_USD
 
     @property
     def is_short_cascade(self) -> bool:
         """Short positions cascading (squeeze) — sustained buy pressure, block new shorts."""
-        return self.liq_short_usd >= _LIQ_CASCADE_THRESHOLD_USD
+        return self.liq_short_usd >= LIQ_CASCADE_USD
 
 
 @dataclass(frozen=True)
@@ -83,11 +83,11 @@ class OrderbookData:
 
     @property
     def bid_dominated(self) -> bool:
-        return self.imbalance > _OB_BID_DOMINATED
+        return self.imbalance > OB_BID_DOMINATED
 
     @property
     def ask_dominated(self) -> bool:
-        return self.imbalance < _OB_ASK_DOMINATED
+        return self.imbalance < OB_ASK_DOMINATED
 
 
 def pair_to_symbol(pair: str) -> Optional[str]:

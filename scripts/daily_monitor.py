@@ -56,7 +56,8 @@ if ENV_FILE.exists():
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 FT_USER  = os.environ.get("FREQTRADE_API_USERNAME", "freqtrade")
 FT_PASS  = os.environ.get("FREQTRADE_API_PASSWORD", "change-me")
-FT_BASE  = f"http://{os.environ.get('FREQTRADE_API_HOST','127.0.0.1')}:{os.environ.get('FREQTRADE_API_PORT','8081')}/api/v1"
+FT_BASE        = f"http://{os.environ.get('FREQTRADE_API_HOST','127.0.0.1')}:{os.environ.get('FREQTRADE_API_PORT','8081')}/api/v1"
+DASHBOARD_BASE = f"http://{os.environ.get('DASHBOARD_HOST','127.0.0.1')}:{os.environ.get('DASHBOARD_PORT','8080')}"
 
 MONITOR_MODEL = os.environ.get("MONITOR_MODEL", "claude-sonnet-4-6")
 TODAY         = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -151,7 +152,7 @@ def collect_bot_data() -> dict:
 
 def collect_risk_state() -> dict:
     try:
-        r = requests.get("http://127.0.0.1:8080/api/status", timeout=3)
+        r = requests.get(f"{DASHBOARD_BASE}/api/status", timeout=3)
         return r.json()
     except Exception:
         return {}

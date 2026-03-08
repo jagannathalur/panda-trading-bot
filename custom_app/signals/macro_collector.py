@@ -44,6 +44,7 @@ from custom_app.signals.market_microstructure import (
     OIData, LiqData, OrderbookData,
     fetch_open_interest, fetch_liquidations, fetch_orderbook_imbalance,
     pair_to_symbol,
+    LIQ_CASCADE_USD, OI_SURGE_PCT, OI_DECLINE_PCT,
 )
 from custom_app.signals.geopolitical import GeopoliticalGate, GeopoliticalRisk
 
@@ -60,7 +61,8 @@ _GREED_BLOCK_SHORT_THRESHOLD = 85       # F&G > 85 = Extreme Greed → no shorts
 _GEO_SPIKE_THRESHOLD = 0.8             # GDELT risk > 0.8 → block all
 
 
-_LIQ_CASCADE_USD = 5_000_000  # $5M liquidated in 5 min = cascade
+# Thresholds imported from market_microstructure — single source of truth:
+# LIQ_CASCADE_USD, OI_SURGE_PCT, OI_DECLINE_PCT
 
 
 @dataclass(frozen=True)
@@ -94,27 +96,27 @@ class MacroSignalState:
     def is_liquidation_cascade(self, pair: str) -> bool:
         """Total liquidation volume exceeded threshold (used for LLM context)."""
         pd = self.pair_data.get(pair)
-        return pd is not None and pd.liq_volume_5min_usd >= _LIQ_CASCADE_USD
+        return pd is not None and pd.liq_volume_5min_usd >= LIQ_CASCADE_USD
 
     def is_long_liq_cascade(self, pair: str) -> bool:
         """Long positions cascading (sell pressure). Block new longs."""
         pd = self.pair_data.get(pair)
-        return pd is not None and pd.liq_long_usd >= _LIQ_CASCADE_USD
+        return pd is not None and pd.liq_long_usd >= LIQ_CASCADE_USD
 
     def is_short_liq_cascade(self, pair: str) -> bool:
         """Short positions cascading/squeezed (buy pressure). Block new shorts."""
         pd = self.pair_data.get(pair)
-        return pd is not None and pd.liq_short_usd >= _LIQ_CASCADE_USD
+        return pd is not None and pd.liq_short_usd >= LIQ_CASCADE_USD
 
     def is_oi_declining_long_block(self, pair: str) -> bool:
         """Block new longs when open interest is falling (longs closing)."""
         pd = self.pair_data.get(pair)
-        return pd is not None and pd.oi_change_pct < -5.0
+        return pd is not None and pd.oi_change_pct < OI_DECLINE_PCT
 
     def is_oi_surging_short_block(self, pair: str) -> bool:
         """Block new shorts when OI is surging (shorts getting crowded)."""
         pd = self.pair_data.get(pair)
-        return pd is not None and pd.oi_change_pct > 20.0
+        return pd is not None and pd.oi_change_pct > OI_SURGE_PCT
 
     def blocks_long(self, pair: str) -> Optional[str]:
         """Return reason string if long should be blocked, else None."""

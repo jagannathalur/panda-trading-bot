@@ -52,10 +52,12 @@ try:
     from custom_app.signals.news_fetcher import NewsFetcher
     from custom_app.signals.macro_collector import MacroSignalCollector
     from custom_app.signals.entry_filters import mtf_ema_aligned, orderbook_allows_entry
+    from custom_app.signals.market_microstructure import OI_SURGE_PCT
     _SIGNALS_AVAILABLE = True
 except ImportError:
     logger.warning("[GridTrendV2] custom_app.signals not available — running without LLM/funding gates")
     _SIGNALS_AVAILABLE = False
+    OI_SURGE_PCT = 20.0  # fallback constant if signals module unavailable
 
 
 class GridTrendV2(IStrategy):
@@ -334,11 +336,11 @@ class GridTrendV2(IStrategy):
                     atr_pct * 100, stake,
                 )
 
-        # Further reduce stake in crowded OI conditions (OI surged > 20%)
+        # Further reduce stake in crowded OI conditions
         if _SIGNALS_AVAILABLE and pair_str:
             macro_state = MacroSignalCollector.get_instance().get_state(pair_str)
             pd = macro_state.pair_data.get(pair_str)
-            if pd is not None and pd.oi_change_pct > 20.0:
+            if pd is not None and pd.oi_change_pct > OI_SURGE_PCT:
                 stake = stake * 0.5
                 logger.info(
                     "[GridTrendV2] Crowded trade (OI +%.1f%%) — stake reduced 50%% to %.2f",

@@ -143,8 +143,8 @@ def _render_dashboard_html() -> str:
       <div class="stat-row"><span>Kill Switch</span><span id="kill-switch" class="green">&#x25CF; Disarmed</span></div>
       <div class="stat-row"><span>No-Alpha Gate</span><span class="green">&#x25CF; Active</span></div>
       <div class="stat-row"><span>Risk Engine</span><span class="green">&#x25CF; Active</span></div>
-      <div class="stat-row"><span>Daily Loss Cap</span><span>2.0%</span></div>
-      <div class="stat-row"><span>Drawdown Cap</span><span>10.0%</span></div>
+      <div class="stat-row"><span>Daily Loss Cap</span><span id="cap-daily-loss">2.0%</span></div>
+      <div class="stat-row"><span>Drawdown Cap</span><span id="cap-drawdown">10.0%</span></div>
     </div>
 
     <!-- Signal Gates -->
@@ -372,10 +372,24 @@ def _render_dashboard_html() -> str:
       } catch (e) { /* ignore */ }
     }
 
+    // Load risk config once (caps don't change at runtime)
+    async function loadRiskConfig() {
+      try {
+        const r = await fetch('/api/risk-config');
+        if (!r.ok) return;
+        const cfg = await r.json();
+        document.getElementById('cap-daily-loss').textContent =
+          (cfg.max_daily_loss_pct ?? 2.0).toFixed(1) + '%';
+        document.getElementById('cap-drawdown').textContent =
+          (cfg.max_drawdown_pct ?? 10.0).toFixed(1) + '%';
+      } catch (e) { /* ignore */ }
+    }
+
     async function refreshAll() {
       await Promise.allSettled([refreshPnL(), refreshTrades(), refreshStatus(), refreshAudit()]);
     }
 
+    loadRiskConfig();
     setInterval(refreshAll, 5000);
     refreshAll();
   </script>

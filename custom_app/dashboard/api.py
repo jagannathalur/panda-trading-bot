@@ -125,6 +125,17 @@ async def get_promotion_status() -> list:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@router.get("/risk-config")
+async def get_risk_config() -> dict:
+    """Get the current risk limit configuration (what the caps are set to)."""
+    try:
+        from custom_app.risk_layer.limits import RiskLimits
+        limits = RiskLimits.from_env()
+        return limits.to_dict()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.get("/no-alpha-thresholds")
 async def get_no_alpha_thresholds() -> dict:
     """Get current no-alpha gate thresholds."""
