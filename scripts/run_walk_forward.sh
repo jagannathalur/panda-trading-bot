@@ -9,7 +9,7 @@ if [ -f "$ROOT_DIR/.env" ]; then
   set -a; source "$ROOT_DIR/.env"; set +a
 fi
 
-STRATEGY="${FREQTRADE_STRATEGY:-GridTrendV1}"
+STRATEGY="${FREQTRADE_STRATEGY:-GridTrendV2}"
 WINDOWS="${WALK_FORWARD_WINDOWS:-5}"
 
 echo "=== Walk-Forward Validation: $STRATEGY | $WINDOWS windows ==="

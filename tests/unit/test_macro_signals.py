@@ -565,17 +565,18 @@ class TestLLMPromptEnrichment:
             orderbook_imbalance=0.3,
         )
         prompt = gate._build_prompt("BTC/USDT", "long", ["BTC rises"], ctx)
-        assert "Fear & Greed: 22" in prompt
+        assert "22/100" in prompt
         assert "Extreme Fear" in prompt
         assert "0.65" in prompt
-        assert "YES" in prompt  # liquidation alert
+        # liquidation alert shows as liq_long or total cascade in the new format
         assert "-7.5" in prompt
+        assert "MARKET MICROSTRUCTURE" in prompt
 
     def test_no_macro_context_prompt_still_valid(self):
         gate = LLMSentimentGate(model="test")
         prompt = gate._build_prompt("BTC/USDT", "long", [], None)
-        assert "PAIR: BTC/USDT" in prompt
-        assert "MACRO CONTEXT" not in prompt
+        assert "BTC/USDT" in prompt
+        assert "MARKET MICROSTRUCTURE" not in prompt
 
     def test_evaluate_passes_macro_context_to_call_llm(self):
         gate = LLMSentimentGate(model="test")

@@ -160,6 +160,9 @@ class MacroSignalState:
             liquidation_alert=self.is_liquidation_cascade(pair),
             oi_change_pct=pd.oi_change_pct if pd else 0.0,
             orderbook_imbalance=pd.orderbook_imbalance if pd else 0.5,
+            liq_long_usd=pd.liq_long_usd if pd else 0.0,
+            liq_short_usd=pd.liq_short_usd if pd else 0.0,
+            # funding_rate_pct set by the strategy after the funding gate runs
         )
 
     def age_seconds(self) -> float:
@@ -176,6 +179,10 @@ class MacroContext:
     liquidation_alert: bool
     oi_change_pct: float
     orderbook_imbalance: float
+    # Richer context — populated when data is available
+    liq_long_usd: float = 0.0             # long positions liquidated in 5min ($)
+    liq_short_usd: float = 0.0            # short positions liquidated in 5min ($)
+    funding_rate_pct: Optional[float] = None  # 8h rate in %; positive = longs pay shorts
 
 
 # Shared empty state — returned before first fetch completes

@@ -110,14 +110,14 @@ def _render_dashboard_html() -> str:
     <!-- Bot Status -->
     <div class="panel">
       <div class="panel-title">Bot Status</div>
-      <div class="stat-row"><span>Freqtrade</span><span id="ft-status" class="green">&#x25CF; Running</span></div>
+      <div class="stat-row"><span>Trading Engine</span><span id="ft-status" class="green">&#x25CF; Running</span></div>
       <div class="stat-row"><span>Strategy</span><span id="strategy-name" class="blue">—</span></div>
       <div class="stat-row"><span>Timeframe</span><span id="timeframe">—</span></div>
       <div class="stat-row"><span>Open Trades</span><span id="open-trades">0</span></div>
       <div class="stat-row"><span>Total Trades</span><span id="total-trades">0</span></div>
     </div>
 
-    <!-- PnL (live from Freqtrade) -->
+    <!-- PnL (live from trading engine) -->
     <div class="panel">
       <div class="panel-title">Profit &amp; Loss</div>
       <div class="stat-row"><span>Total Realized</span><span id="total-pnl">$0.00</span></div>
@@ -392,6 +392,23 @@ def _render_dashboard_html() -> str:
     loadRiskConfig();
     setInterval(refreshAll, 5000);
     refreshAll();
+  </script>
+
+  <footer style="text-align:center; padding:16px; color:var(--muted); font-size:11px; border-top:1px solid var(--border); margin-top:8px;">
+    &#x1F43C; <strong>Panda Trading Bot</strong> &mdash; Operations Dashboard &mdash; v2.0 &nbsp;|&nbsp;
+    Mode display is read-only &mdash; changes require operator restart &nbsp;|&nbsp;
+    <span id="footer-strategy"></span>
+  </footer>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const s = document.getElementById('strategy-name');
+      const fs = document.getElementById('footer-strategy');
+      if (s && fs) {
+        const update = () => { fs.textContent = 'Active strategy: ' + (s.textContent || '—'); };
+        new MutationObserver(update).observe(s, { childList: true, characterData: true, subtree: true });
+        update();
+      }
+    });
   </script>
 </body>
 </html>"""

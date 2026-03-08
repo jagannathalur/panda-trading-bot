@@ -266,6 +266,12 @@ class GridTrendV2(IStrategy):
             if not self._funding_gate.check(pair, side):
                 logger.info("[GridTrendV2] Funding rate blocked %s %s", side, pair)
                 return False
+            # Enrich macro_context with the rate (already cached by check above)
+            if macro_context is not None:
+                rate = self._funding_gate.get_last_rate(pair)
+                if rate is not None:
+                    from dataclasses import replace as _replace
+                    macro_context = _replace(macro_context, funding_rate_pct=rate * 100)
 
         # 6. LLM sentiment gate (last — most expensive per call but rare)
         if self._sentiment_gate is not None and self._news_fetcher is not None:

@@ -9,7 +9,7 @@ if [ -f "$ROOT_DIR/.env" ]; then
   set -a; source "$ROOT_DIR/.env"; set +a
 fi
 
-STRATEGY="${1:-${FREQTRADE_STRATEGY:-GridTrendV1}}"
+STRATEGY="${1:-${FREQTRADE_STRATEGY:-GridTrendV2}}"
 TARGET_STATE="${2:-backtest_passed}"
 
 echo "=== Strategy Promotion: $STRATEGY -> $TARGET_STATE ==="

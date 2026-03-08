@@ -2,7 +2,7 @@
 # =============================================================
 # LaunchPandaBot.command — Double-click to start everything.
 # Starts: Freqtrade bot (futures paper) + custom dashboard
-# Opens:  FreqUI (8081) + Ops Dashboard (8080) in browser
+# Opens:  Freqtrade Web UI (8081) + Ops Dashboard (8080) in browser
 # =============================================================
 
 set -euo pipefail
@@ -89,7 +89,7 @@ done
 # Start trading
 curl -sf -X POST "http://127.0.0.1:8081/api/v1/start" \
     -u "${FREQTRADE_API_USERNAME:-freqtrade}:${FREQTRADE_API_PASSWORD:-change-me}" \
-    > /dev/null 2>&1 && echo "Bot started." || echo "Warning: Could not auto-start bot — start manually in FreqUI"
+    > /dev/null 2>&1 && echo "Bot started." || echo "Warning: Could not auto-start bot — start manually in Freqtrade Web UI"
 
 # Open dashboards in browser
 sleep 2
@@ -99,7 +99,7 @@ open "http://127.0.0.1:8080" 2>/dev/null || true
 echo ""
 echo "=================================================="
 echo "  LAUNCHED"
-echo "  FreqUI:         http://127.0.0.1:8081/ui/"
+echo "  Freqtrade Web UI:         http://127.0.0.1:8081/ui/"
 echo "  Ops Dashboard:  http://127.0.0.1:8080"
 echo "  Login:          freqtrade / change-me"
 echo "=================================================="

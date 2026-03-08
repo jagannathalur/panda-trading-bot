@@ -2,7 +2,7 @@
 # =============================================================
 # KillSwitch.command — Emergency stop. Double-click to halt.
 # Stops all trading immediately. Does NOT close open positions.
-# To close positions: use FreqUI → Force Exit All.
+# To close positions: use Freqtrade Web UI → Force Exit All.
 # =============================================================
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -34,10 +34,10 @@ fi
 echo ""
 echo "Halting bot..."
 
-# Stop trading via FreqUI API
+# Stop trading via Freqtrade Web UI API
 STOP_RESULT=$(curl -sf -X POST "$FT_URL/api/v1/stop" \
     -u "$FT_USER:$FT_PASS" 2>/dev/null || echo "unreachable")
-echo "FreqUI stop: $STOP_RESULT"
+echo "Freqtrade Web UI stop: $STOP_RESULT"
 
 # Also arm our custom risk engine kill switch if dashboard is running
 KILL_RESULT=$(curl -sf -X POST "http://127.0.0.1:8080/api/kill-switch" \
@@ -56,7 +56,7 @@ echo ""
 echo "=================================================="
 echo "  KILL SWITCH ARMED"
 echo "  All new trades: HALTED"
-echo "  Open positions: check FreqUI to manage"
+echo "  Open positions: check Freqtrade Web UI to manage"
 echo "  To restart:     LaunchPandaBot.command"
 echo "=================================================="
 echo ""

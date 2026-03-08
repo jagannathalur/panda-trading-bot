@@ -84,6 +84,18 @@ class FundingRateGate:
         logger.debug("[FundingRate] %s %s approved: rate=%.4f%%", side, pair, rate * 100)
         return True
 
+    def get_last_rate(self, pair: str) -> Optional[float]:
+        """
+        Return the most recently fetched funding rate for a pair (None if not cached).
+        Does NOT make a network call — uses the cache populated by check().
+        Rate is expressed as a decimal (e.g. 0.0001 = 0.01%/8h).
+        """
+        symbol = self._pair_to_symbol(pair)
+        if not symbol:
+            return None
+        cached = self._cache.get(symbol)
+        return cached[1] if cached else None
+
     def _get_funding_rate(self, symbol: str) -> Optional[float]:
         cached = self._cache.get(symbol)
         if cached:

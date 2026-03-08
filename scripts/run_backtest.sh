@@ -9,7 +9,7 @@ if [ -f "$ROOT_DIR/.env" ]; then
   set -a; source "$ROOT_DIR/.env"; set +a
 fi
 
-STRATEGY="${FREQTRADE_STRATEGY:-GridTrendV1}"
+STRATEGY="${FREQTRADE_STRATEGY:-GridTrendV2}"
 TIMERANGE="${BACKTEST_TIMERANGE:-20230101-20231231}"
 
 echo "=== Running Backtest: $STRATEGY | $TIMERANGE ==="

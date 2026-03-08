@@ -21,6 +21,6 @@ cd "$ROOT_DIR/freqtrade"
 python3 -m freqtrade trade \
   --config "$ROOT_DIR/configs/base.yaml" \
   --config "$ROOT_DIR/configs/paper.yaml" \
-  --strategy "${FREQTRADE_STRATEGY:-GridTrendV1}" \
+  --strategy "${FREQTRADE_STRATEGY:-GridTrendV2}" \
   --userdir "$ROOT_DIR/user_data" \
   --logfile "$ROOT_DIR/logs/paper.log"

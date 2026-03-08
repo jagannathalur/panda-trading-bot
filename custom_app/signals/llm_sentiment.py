@@ -193,44 +193,127 @@ class LLMSentimentGate:
         headlines: list[str],
         macro_context: "Optional[MacroContext]" = None,
     ) -> str:
-        direction = "buying (long)" if side == "long" else "selling short"
-        if headlines:
-            headline_block = "\n".join(f"- {h}" for h in headlines)
-        else:
-            headline_block = "(no recent headlines available)"
+        direction = "LONG (buy)" if side == "long" else "SHORT (sell)"
+        headline_block = (
+            "\n".join(f"  - {h}" for h in headlines)
+            if headlines else "  (no recent headlines)"
+        )
 
-        # Macro context block — added when pre-computed state is available
-        if macro_context is not None:
-            ob_pct = round(macro_context.orderbook_imbalance * 100)
-            liq_str = "YES — cascade in progress" if macro_context.liquidation_alert else "none"
-            oi_str = f"{macro_context.oi_change_pct:+.1f}%"
-            macro_block = (
-                f"\nMACRO CONTEXT (pre-computed, 30s old max):\n"
-                f"Fear & Greed: {macro_context.fear_greed_value} ({macro_context.fear_greed_label})\n"
-                f"Geopolitical risk: {macro_context.geo_risk_score:.2f}/1.0 ({macro_context.geo_risk_summary})\n"
-                f"Liquidation cascade: {liq_str}\n"
-                f"Open interest trend: {oi_str} (negative = positions closing)\n"
-                f"Orderbook: {ob_pct}% bids (>65% bullish pressure, <35% bearish)\n"
-            )
-        else:
-            macro_block = ""
+        micro_block = self._format_micro_block(macro_context) if macro_context else ""
 
         return (
-            f"You are a crypto market sentiment filter for an automated trading bot.\n"
-            f"PAIR: {pair}\n"
-            f"DIRECTION: {direction}\n"
-            f"RECENT HEADLINES:\n{headline_block}\n"
-            f"{macro_block}\n"
-            f"Respond in JSON only — no explanation outside the JSON:\n"
-            f'{{"sentiment": <float -1.0 to 1.0>, '
-            f'"confidence": <float 0.0 to 1.0>, '
-            f'"black_swan": <bool — true ONLY for: exchange hacks/bankruptcy, '
-            f'regulatory bans, major protocol exploits>, '
-            f'"reason": "<max 15 words>"}}\n\n'
-            f"Rules: sentiment>0 = bullish, sentiment<0 = bearish. "
-            f"Low confidence if news is old or irrelevant. "
-            f"black_swan only for catastrophic, market-halting events. "
-            f"Consider macro context in your assessment."
+            f"You are a crypto market sentiment filter for the Panda Trading Bot.\n"
+            f"Assess whether current market conditions support this trade.\n\n"
+            f"PROPOSED TRADE: {direction} {pair}\n\n"
+            f"{micro_block}"
+            f"RECENT HEADLINES:\n{headline_block}\n\n"
+            f"In one sentence, state the key signal, then output ONLY this JSON:\n"
+            f'{{"sentiment": <-1.0 very bearish to +1.0 very bullish>, '
+            f'"confidence": <0.0 to 1.0>, '
+            f'"black_swan": <true ONLY for: exchange hack/bankruptcy, '
+            f'regulatory trading ban, major protocol exploit>, '
+            f'"reason": "<10-15 words>"}}\n\n'
+            f"Scoring guide:\n"
+            f"  sentiment > 0  = market favours the {side} trade\n"
+            f"  sentiment < 0  = market opposes the {side} trade\n"
+            f"  confidence < 0.5 if signals are mixed or headlines are stale/off-topic\n"
+            f"  Weight orderbook pressure and liquidations more than single news items."
+        )
+
+    @staticmethod
+    def _format_micro_block(ctx: "MacroContext") -> str:
+        """Build the interpreted market microstructure block for the prompt."""
+        # Fear & Greed interpretation
+        fg = ctx.fear_greed_value
+        if fg < 20:
+            fg_interp = "extreme fear — historically a mean-reversion zone"
+        elif fg < 40:
+            fg_interp = "fear — caution warranted for longs"
+        elif fg < 60:
+            fg_interp = "neutral"
+        elif fg < 80:
+            fg_interp = "greed — crowded longs, caution for shorts"
+        else:
+            fg_interp = "extreme greed — historically a mean-reversion zone"
+
+        # Orderbook interpretation
+        ob = ctx.orderbook_imbalance
+        bid_pct = round(ob * 100)
+        ask_pct = 100 - bid_pct
+        if ob > 0.65:
+            ob_interp = "buyers strongly dominating"
+        elif ob > 0.55:
+            ob_interp = "slight buy pressure"
+        elif ob >= 0.45:
+            ob_interp = "balanced"
+        elif ob >= 0.35:
+            ob_interp = "slight sell pressure"
+        else:
+            ob_interp = "sellers strongly dominating"
+
+        # OI interpretation
+        oi = ctx.oi_change_pct
+        if oi < -5:
+            oi_interp = "positions unwinding — conviction weakening"
+        elif oi < 0:
+            oi_interp = "slightly declining"
+        elif oi < 5:
+            oi_interp = "stable"
+        elif oi < 20:
+            oi_interp = "building — momentum increasing"
+        else:
+            oi_interp = "surging — crowded, elevated liquidation risk"
+
+        # Liquidations
+        liq_long = getattr(ctx, "liq_long_usd", 0.0)
+        liq_short = getattr(ctx, "liq_short_usd", 0.0)
+        if liq_long >= 1_000_000:
+            long_liq_str = f"${liq_long/1e6:.1f}M — longs forced out, sell pressure"
+        elif liq_long > 0:
+            long_liq_str = f"${liq_long:,.0f} — minor"
+        else:
+            long_liq_str = "none"
+
+        if liq_short >= 1_000_000:
+            short_liq_str = f"${liq_short/1e6:.1f}M — shorts squeezed, buy pressure"
+        elif liq_short > 0:
+            short_liq_str = f"${liq_short:,.0f} — minor"
+        else:
+            short_liq_str = "none"
+
+        # Funding rate
+        funding_rate_pct = getattr(ctx, "funding_rate_pct", None)
+        if funding_rate_pct is not None:
+            if funding_rate_pct > 0.03:
+                funding_interp = "high — longs paying significant carry cost"
+            elif funding_rate_pct > 0.01:
+                funding_interp = "positive — longs paying shorts (minor cost)"
+            elif funding_rate_pct > -0.01:
+                funding_interp = "near-zero — balanced"
+            elif funding_rate_pct > -0.03:
+                funding_interp = "negative — shorts paying longs (minor cost)"
+            else:
+                funding_interp = "deeply negative — shorts under heavy carry cost"
+            funding_line = f"  Funding rate:   {funding_rate_pct:+.4f}%/8h — {funding_interp}\n"
+        else:
+            funding_line = ""
+
+        geo_line = (
+            f"  Geopolitical:   {ctx.geo_risk_score:.2f}/1.0 ({ctx.geo_risk_summary})\n"
+            if ctx.geo_risk_score > 0.1 else
+            f"  Geopolitical:   {ctx.geo_risk_score:.2f}/1.0 — no crisis signal\n"
+        )
+
+        return (
+            f"MARKET MICROSTRUCTURE (snapshot, <30s old):\n"
+            f"  Fear & Greed:   {fg}/100 — {ctx.fear_greed_label} ({fg_interp})\n"
+            f"{geo_line}"
+            f"  Orderbook:      Bids {bid_pct}% / Asks {ask_pct}% — {ob_interp}\n"
+            f"  Open interest:  {oi:+.1f}% — {oi_interp}\n"
+            f"  Liq long-side:  {long_liq_str}\n"
+            f"  Liq short-side: {short_liq_str}\n"
+            f"{funding_line}"
+            f"\n"
         )
 
     def _parse_response(self, pair: str, side: str, raw: str) -> SentimentResult:
